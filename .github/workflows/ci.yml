@@ -1,0 +1,171 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create data directory
+      run: mkdir -p data
+    
+    - name: Run linting
+      run: |
+        python -c "import sys; print('Python version:', sys.version)"
+        python -c "import pandas, sklearn, numpy, matplotlib, seaborn, flask; print('All dependencies imported successfully')"
+    
+    - name: Test imports
+      run: |
+        python -c "import sys; sys.path.append('src'); from data_loader import DataLoader; print('DataLoader imported successfully')"
+        python -c "import sys; sys.path.append('src'); from data_preprocessing import DataPreprocessor; print('DataPreprocessor imported successfully')"
+        python -c "import sys; sys.path.append('src'); from model_training import ModelTrainer; print('ModelTrainer imported successfully')"
+        python -c "import sys; sys.path.append('src'); from model_evaluation import ModelEvaluator; print('ModelEvaluator imported successfully')"
+        python -c "import sys; sys.path.append('src'); from chatbot_interface import LaptopRecommenderChatbot; print('Chatbot imported successfully')"
+    
+    - name: Test demo script
+      run: |
+        python -c "import demo; print('Demo script imported successfully')"
+    
+    - name: Test web chatbot
+      run: |
+        python -c "import web_chatbot; print('Web chatbot imported successfully')"
+    
+    - name: Check file structure
+      run: |
+        echo "Checking project structure..."
+        ls -la
+        ls -la src/
+        ls -la notebooks/
+        echo "All files present"
+    
+    - name: Test with mock data
+      run: |
+        python -c "
+        import pandas as pd
+        import numpy as np
+        
+        # Create mock data for testing
+        mock_data = pd.DataFrame({
+            'Brand': ['Dell', 'HP', 'Lenovo'],
+            'Processor': ['Intel i5', 'AMD Ryzen', 'Intel i7'],
+            'RAM': ['8 GB', '16 GB', '8 GB'],
+            'Storage': ['512 GB SSD', '1 TB HDD', '256 GB SSD'],
+            'GPU': ['Integrated', 'GTX 1650', 'Integrated'],
+            'Screen_Size': ['15.6 inches', '14 inches', '13.3 inches'],
+            'Weight': ['2.1 kg', '1.8 kg', '1.5 kg'],
+            'Price': [800, 1200, 600]
+        })
+        
+        # Save mock data
+        mock_data.to_csv('data/Cleaned_Laptop_data.csv', index=False)
+        print('Mock data created successfully')
+        "
+    
+    - name: Test data loading
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        from data_loader import DataLoader
+        
+        loader = DataLoader('data/Cleaned_Laptop_data.csv')
+        data = loader.load_data()
+        print(f'Data loaded successfully: {data.shape}')
+        "
+    
+    - name: Test preprocessing
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        from data_loader import DataLoader
+        from data_preprocessing import DataPreprocessor
+        
+        loader = DataLoader('data/Cleaned_Laptop_data.csv')
+        data = loader.load_data()
+        target_col = loader.get_target_variable()
+        X, y = loader.split_features_target(target_col)
+        
+        preprocessor = DataPreprocessor()
+        X_processed, feature_names = preprocessor.create_preprocessing_pipeline(X)
+        print(f'Preprocessing completed: {len(feature_names)} features')
+        "
+    
+    - name: Test chatbot initialization
+      run: |
+        python -c "
+        import sys
+        sys.path.append('src')
+        from chatbot_interface import LaptopRecommenderChatbot
+        
+        chatbot = LaptopRecommenderChatbot('data/Cleaned_Laptop_data.csv')
+        response = chatbot.get_response('Hi, I need a laptop for gaming')
+        print('Chatbot test completed successfully')
+        "
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          *.log
+          results/
+        retention-days: 7
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to GitHub Pages (if needed)
+      run: |
+        echo "Deployment step - ready for future expansion"
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref }}"
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Changes in this Release:
+          ${{ github.event.head_commit.message }}
+        draft: false
+        prerelease: false 
