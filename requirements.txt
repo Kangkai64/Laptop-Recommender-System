@@ -10,3 +10,7 @@ aiofiles>=23.0.0
 requests>=2.31.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
+beautifulsoup4>=4.12.0
+datasets>=2.14.0
+transformers>=4.30.0
+torch>=2.0.0

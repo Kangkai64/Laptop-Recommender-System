@@ -1,48 +1,58 @@
 ============================================================
-LAPTOP DATASET ANALYSIS REPORT
+AMAZON LAPTOP REVIEWS ENRICHED DATASET ANALYSIS REPORT
 ============================================================
-Generated on: 2025-08-23 15:36:50
+Generated on: 2025-08-24 09:23:33
 
-BASIC INFORMATION:
-Dataset Shape: (858, 32)
-Total Features: 32
-Memory Usage: 0.66 MB
+DATASET OVERVIEW
+------------------------------
+Total Records: 15,827
+Total Features: 44
+Memory Usage: 174.02 MB
 
-PRICE ANALYSIS:
-Price Range: RM 1011.56 - RM 11848.37
-Average Price: RM 3601.53
-Median Price: RM 3046.30
+PRICE ANALYSIS
+------------------------------
+Price Range: $389.56 - $2799.95
+Average Price: $1144.50
+Median Price: $1069.00
 
-Price Categories:
-  Mid-range: 468 laptops
-  High-end: 218 laptops
-  Budget: 138 laptops
-  Premium: 34 laptops
+BRAND ANALYSIS
+------------------------------
+Total Brands: 32
+Most Popular Brand: ASUS
+Average Models per Brand: 494.6
 
-BRAND ANALYSIS:
-Top 5 Brands:
-  1. ASUS: 242 models
-  2. DELL: 154 models
-  3. Lenovo: 145 models
-  4. HP: 142 models
-  5. acer: 58 models
+Top 10 Brands:
+  1. ASUS: 3,047 reviews
+  2. Dell: 2,958 reviews
+  3. Lenovo: 1,969 reviews
+  4. acer: 1,939 reviews
+  5. Acer: 1,559 reviews
+  6. MSI: 1,299 reviews
+  7. HP: 1,280 reviews
+  8. Razer: 759 reviews
+  9. Alienware: 385 reviews
+  10. Gigabyte: 146 reviews
 
-SPECIFICATIONS ANALYSIS:
-RAM Options: [4, 8, 16, 32]
-Storage Types: ['SSD', 'HDD', 'Hybrid']
-Processor Brands: ['Intel', 'AMD', 'M1', 'MediaTek', 'Qualcomm']
+RATING ANALYSIS
+------------------------------
+Average Rating: 3.83/5.0
+Median Rating: 5.00/5.0
+Rating Range: 1.0 - 5.0
 
-VALUE ANALYSIS:
-Average Value Score: 0.6861
-Best Value Laptops:
-  1. ASUS Celeron - RM 1161.12 (Score: 50.0036)
-  2. acer Aspire - RM 2467.92 (Score: 19.5510)
-  3. HP Chromebook - RM 1088.52 (Score: 16.1388)
-  4. HP 15s - RM 1911.32 (Score: 16.0215)
-  5. HP Chromebook - RM 1112.72 (Score: 15.7878)
+Rating Categories:
+  Excellent: 8,539 reviews
+  Poor: 3,697 reviews
+  Good: 2,424 reviews
+  Fair: 1,167 reviews
 
-No missing values found in the dataset.
+REVIEW ANALYSIS
+------------------------------
+Total Reviews: 15,827
+Average Review Length: 525 characters
+Review Length Range: 1 - 13758 characters
 
-============================================================
-END OF REPORT
-============================================================
+Verified Purchases: 14,036 (88.7%)
+
+SPECIFICATIONS ANALYSIS
+------------------------------
+Most Common OS: Windows 10 Home
