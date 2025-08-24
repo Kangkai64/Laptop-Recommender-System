@@ -184,7 +184,14 @@ class LaptopDataPreprocessor:
         clean_columns = [col for col in df_normalized.columns if col.endswith('_clean')]
         numerical_columns = ['average_rating', 'rating_number']
         
-        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns
+        # Add specification columns
+        specification_columns = [col for col in df_normalized.columns if any(x in col for x in [
+            'ram_gb', 'storage_gb', 'screen_size_inches', 'storage_type', 'ram_type', 
+            'processor_model', 'gpu_model', 'storage_category', 'ram_category', 'screen_category',
+            'storage_display'
+        ])]
+        
+        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns + specification_columns
         available_final_columns = [col for col in final_columns if col in df_normalized.columns]
         
         df_final = df_normalized[available_final_columns]
@@ -713,7 +720,10 @@ class LaptopDataPreprocessor:
         # Step 4: Add price conversion
         df_laptop = self.add_price_conversion(df_laptop)
         
-        # Step 5: Normalize data
+        # Step 5: Add specifications using benchmark scraper
+        df_laptop = self.add_specifications_from_benchmark_scraper(df_laptop)
+        
+        # Step 6: Normalize data
         df_laptop_normalized = self.normalize_laptop_data(df_laptop)
         df_rating_normalized = self.normalize_rating_data(df_rating)
         
@@ -724,6 +734,69 @@ class LaptopDataPreprocessor:
         
         return df_laptop_normalized, df_rating_normalized
 
+    def add_specifications_from_benchmark_scraper(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add laptop specifications using the benchmark scraper.
+        
+        Args:
+            df_laptop (pd.DataFrame): Laptop dataframe
+            
+        Returns:
+            pd.DataFrame: Laptop dataframe with added specifications
+        """
+        try:
+            from benchmark_scraper import BenchmarkScraper
+            
+            logger.info("Initializing benchmark scraper for specification extraction...")
+            scraper = BenchmarkScraper()
+            
+            # Extract specifications from text columns
+            df_with_specs = scraper.add_specifications_from_columns(df_laptop)
+            
+            logger.info("Specifications extracted successfully using benchmark scraper")
+            return df_with_specs
+            
+        except ImportError as e:
+            logger.warning(f"Could not import benchmark scraper: {e}")
+            logger.info("Falling back to basic specification extraction...")
+            return self._add_basic_specifications(df_laptop)
+        except Exception as e:
+            logger.error(f"Error in benchmark scraper specification extraction: {e}")
+            logger.info("Falling back to basic specification extraction...")
+            return self._add_basic_specifications(df_laptop)
+    
+    def _add_basic_specifications(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add basic specifications using built-in extraction methods.
+        
+        Args:
+            df_laptop (pd.DataFrame): Laptop dataframe
+            
+        Returns:
+            pd.DataFrame: Laptop dataframe with added specifications
+        """
+        logger.info("Adding basic specifications using built-in methods...")
+        
+        df_specs = df_laptop.copy()
+        
+        # Extract specifications from details_parsed if available
+        if 'details_parsed' in df_specs.columns:
+            # Extract common specs
+            df_specs['ram_gb'] = df_specs['details_parsed'].apply(
+                lambda x: self._extract_spec(x, 'RAM', 'GB') if isinstance(x, dict) else None
+            )
+            df_specs['storage_gb'] = df_specs['details_parsed'].apply(
+                lambda x: self._extract_storage(x) if isinstance(x, dict) else None
+            )
+            df_specs['screen_size'] = df_specs['details_parsed'].apply(
+                lambda x: self._extract_spec(x, 'Screen Size', 'Inches') if isinstance(x, dict) else None
+            )
+            df_specs['processor'] = df_specs['details_parsed'].apply(
+                lambda x: self._extract_processor(x) if isinstance(x, dict) else None
+            )
+        
+        logger.info("Basic specifications added successfully")
+        return df_specs
 
 
     def get_separated_data_summary(self) -> Dict:
@@ -745,7 +818,51 @@ class LaptopDataPreprocessor:
                 'max': self.df_laptop['price_myr'].max() if 'price_myr' in self.df_laptop.columns else None,
                 'mean': self.df_laptop['price_myr'].mean() if 'price_myr' in self.df_laptop.columns else None
             },
-            'average_rating': self.df_laptop['average_rating'].mean() if 'average_rating' in self.df_laptop.columns else None
+            'average_rating': self.df_laptop['average_rating'].mean() if 'average_rating' in self.df_laptop.columns else None,
+            'specifications': {}
+        }
+        
+        # Add specification statistics if available
+        if 'ram_gb' in self.df_laptop.columns:
+            ram_stats = self.df_laptop['ram_gb'].describe()
+            laptop_summary['specifications']['ram'] = {
+                'found': int(self.df_laptop['ram_gb'].notna().sum()),
+                'total': len(self.df_laptop),
+                'mean_gb': float(ram_stats['mean']) if not pd.isna(ram_stats['mean']) else None,
+                'min_gb': int(ram_stats['min']) if not pd.isna(ram_stats['min']) else None,
+                'max_gb': int(ram_stats['max']) if not pd.isna(ram_stats['max']) else None
+            }
+        
+        if 'storage_gb' in self.df_laptop.columns:
+            storage_stats = self.df_laptop['storage_gb'].describe()
+            laptop_summary['specifications']['storage'] = {
+                'found': int(self.df_laptop['storage_gb'].notna().sum()),
+                'total': len(self.df_laptop),
+                'mean_gb': float(storage_stats['mean']) if not pd.isna(storage_stats['mean']) else None,
+                'min_gb': int(storage_stats['min']) if not pd.isna(storage_stats['min']) else None,
+                'max_gb': int(storage_stats['max']) if not pd.isna(storage_stats['max']) else None
+            }
+        
+        if 'screen_size_inches' in self.df_laptop.columns:
+            screen_stats = self.df_laptop['screen_size_inches'].describe()
+            laptop_summary['specifications']['screen_size'] = {
+                'found': int(self.df_laptop['screen_size_inches'].notna().sum()),
+                'total': len(self.df_laptop),
+                'mean_inches': float(screen_stats['mean']) if not pd.isna(screen_stats['mean']) else None,
+                'min_inches': float(screen_stats['min']) if not pd.isna(screen_stats['min']) else None,
+                'max_inches': float(screen_stats['max']) if not pd.isna(screen_stats['max']) else None
+            }
+        
+        # Add column categories
+        laptop_cols = list(self.df_laptop.columns)
+        laptop_summary['column_categories'] = {
+            'product_info': [col for col in laptop_cols if any(x in col for x in ['title', 'brand', 'os', 'color', 'store'])],
+            'pricing': [col for col in laptop_cols if 'price' in col],
+            'ratings': [col for col in laptop_cols if 'rating' in col],
+            'specifications': [col for col in laptop_cols if any(x in col for x in ['ram', 'storage', 'screen', 'processor', 'gpu'])],
+            'benchmarks': [col for col in laptop_cols if 'benchmark' in col],
+            'categories': [col for col in laptop_cols if 'category' in col],
+            'normalized': [col for col in laptop_cols if any(x in col for x in ['encoded', 'clean', 'normalized'])]
         }
         
         rating_summary = {
@@ -790,6 +907,40 @@ def main():
         print(f"  Price Range (MYR): RM {summary['laptop_data']['price_range_myr']['min']:.2f} - RM {summary['laptop_data']['price_range_myr']['max']:.2f}")
         print(f"  Average Price (MYR): RM {summary['laptop_data']['price_range_myr']['mean']:.2f}")
         print(f"  Average Rating: {summary['laptop_data']['average_rating']:.2f}")
+        
+        # Display specification information
+        if 'specifications' in summary['laptop_data']:
+            print("\n  Specifications:")
+            specs = summary['laptop_data']['specifications']
+            if 'ram' in specs:
+                ram_info = specs['ram']
+                print(f"    RAM: {ram_info['found']}/{ram_info['total']} products found")
+                if ram_info['mean_gb']:
+                    print(f"      Range: {ram_info['min_gb']:.0f}GB - {ram_info['max_gb']:.0f}GB, Mean: {ram_info['mean_gb']:.1f}GB")
+            
+            if 'storage' in specs:
+                storage_info = specs['storage']
+                print(f"    Storage: {storage_info['found']}/{storage_info['total']} products found")
+                if storage_info['mean_gb']:
+                    print(f"      Range: {storage_info['min_gb']:.0f}GB - {storage_info['max_gb']:.0f}GB, Mean: {storage_info['mean_gb']:.1f}GB")
+            
+            if 'screen_size' in specs:
+                screen_info = specs['screen_size']
+                print(f"    Screen Size: {screen_info['found']}/{screen_info['total']} products found")
+                if screen_info['mean_inches']:
+                    print(f"      Range: {screen_info['min_inches']:.1f}\" - {screen_info['max_inches']:.1f}\", Mean: {screen_info['mean_inches']:.1f}\"")
+        
+        # Display column categories
+        if 'column_categories' in summary['laptop_data']:
+            print("\n  Column Categories:")
+            categories = summary['laptop_data']['column_categories']
+            for category, cols in categories.items():
+                if cols:
+                    print(f"    {category.replace('_', ' ').title()}: {len(cols)} columns")
+                    if len(cols) <= 5:  # Show all if 5 or fewer
+                        print(f"      {', '.join(cols)}")
+                    else:  # Show first few if more than 5
+                        print(f"      {', '.join(cols[:3])}... and {len(cols)-3} more")
         
         print("\nRATING DATA:")
         print(f"  Total Reviews: {summary['rating_data']['total_reviews']}")

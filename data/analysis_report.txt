@@ -1,58 +1,74 @@
 ============================================================
 AMAZON LAPTOP REVIEWS ENRICHED DATASET ANALYSIS REPORT
 ============================================================
-Generated on: 2025-08-24 09:23:33
+Generated on: 2025-08-24 12:25:15
 
 DATASET OVERVIEW
 ------------------------------
-Total Records: 15,827
-Total Features: 44
-Memory Usage: 174.02 MB
+Laptop Data: 1,050 products, 24 features
+Rating Data: 15,827 reviews, 11 features
+Total Memory Usage: 14.02 MB
 
 PRICE ANALYSIS
 ------------------------------
-Price Range: $389.56 - $2799.95
-Average Price: $1144.50
-Median Price: $1069.00
+Price Range: RM 1850.41 - RM 13299.76
+Average Price: RM 6333.91
+Median Price: RM 5699.95
+
+Price Categories:
+  High-end: 541 laptops
+  Mid-range: 371 laptops
+  Premium: 119 laptops
+  Budget: 19 laptops
 
 BRAND ANALYSIS
 ------------------------------
-Total Brands: 32
+Total Brands: 31
 Most Popular Brand: ASUS
-Average Models per Brand: 494.6
+Average Models per Brand: 33.9
+Note: Brand names restored from encoded values using label encoder.
 
 Top 10 Brands:
-  1. ASUS: 3,047 reviews
-  2. Dell: 2,958 reviews
-  3. Lenovo: 1,969 reviews
-  4. acer: 1,939 reviews
-  5. Acer: 1,559 reviews
-  6. MSI: 1,299 reviews
-  7. HP: 1,280 reviews
-  8. Razer: 759 reviews
-  9. Alienware: 385 reviews
-  10. Gigabyte: 146 reviews
+  1. ASUS: 224 products
+  2. Lenovo: 177 products
+  3. Dell: 141 products
+  4. HP: 128 products
+  5. MSI: 90 products
+  6. Acer: 81 products
+  7. acer: 35 products
+  8. Razer: 35 products
+  9. Alienware: 31 products
+  10. GIGABYTE: 21 products
 
 RATING ANALYSIS
 ------------------------------
-Average Rating: 3.83/5.0
+Average Rating: 3.53/5.0
 Median Rating: 5.00/5.0
-Rating Range: 1.0 - 5.0
+Rating Range: 0.0 - 5.0
+Note: Ratings scaled to 1-5 range. Original range was 0.00-1.00
+Original Rating Range: 0.00 - 1.00
 
-Rating Categories:
-  Excellent: 8,539 reviews
-  Poor: 3,697 reviews
-  Good: 2,424 reviews
-  Fair: 1,167 reviews
+Total Helpful Votes: 48.22915042868278
+Average Helpful Votes per Review: 0.0
 
 REVIEW ANALYSIS
 ------------------------------
 Total Reviews: 15,827
-Average Review Length: 525 characters
-Review Length Range: 1 - 13758 characters
+Average Review Length: 524 characters
+Review Length Range: 0 - 13758 characters
 
-Verified Purchases: 14,036 (88.7%)
+Review Length Categories:
+  Medium: 7,154 reviews
+  Short: 4,029 reviews
+  Long: 2,504 reviews
+  Very Long: 2,118 reviews
 
 SPECIFICATIONS ANALYSIS
 ------------------------------
-Most Common OS: Windows 10 Home
+RAM Range: 2 - 64 GB
+Average RAM: 20.5 GB
+
+Storage Range: 128 - 4096 GB
+Average Storage: 885.6 GB
+
+Most Common OS: 10

@@ -14,6 +14,8 @@ from typing import Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup
 import json
 import os
+from urllib.parse import urljoin, quote
+import random
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -152,6 +154,10 @@ class BenchmarkScraper:
         self.cpu_benchmarks = {}
         self.gpu_benchmarks = {}
         
+        # Passmark URLs
+        self.cpu_url = "https://www.cpubenchmark.net/cpu_list.php"
+        self.gpu_url = "https://www.videocardbenchmark.net/gpu_list.php"
+        
         # Load cached data if available
         self.load_cached_benchmarks()
         
@@ -256,156 +262,64 @@ class BenchmarkScraper:
         """
         logger.info("Fetching CPU benchmarks from PassMark...")
         
-        # Common CPU models and their approximate benchmark scores
-        # This is a curated list based on PassMark data
-        cpu_benchmarks = {
-            # Intel Core i3 series
-            'core i3': 4000,
-            'core i3-1110g4': 3500,
-            'core i3-1115g4': 3800,
-            'core i3-1125g4': 4200,
-            'core i3-1210u': 4500,
-            'core i3-1215u': 4800,
-            'core i3-1310u': 5200,
-            'core i3-1315u': 5500,
-            'core i3-1320pe': 5800,
-            'core i3-1320pre': 6000,
-            'core i3-1110g4': 3500,
-            'core i3-1115g4': 3800,
-            'core i3-1125g4': 4200,
+        try:
+            # Add delay to be respectful to the server
+            time.sleep(random.uniform(1, 3))
             
-            # Intel Core i5 series
-            'core i5': 8000,
-            'core i5-1135g7': 9486,
-            'core i5-1145g7': 8000,
-            'core i5-1230u': 8500,
-            'core i5-1235u': 9000,
-            'core i5-1240p': 12000,
-            'core i5-1250p': 13000,
-            'core i5-1330u': 9500,
-            'core i5-1335u': 10000,
-            'core i5-1340p': 14000,
-            'core i5-1350p': 15000,
-            'core i5-8250u': 7000,
-            'core i5-8265u': 7200,
-            'core i5-8365u': 7500,
-            'core i5-10210u': 7800,
-            'core i5-10310u': 8000,
+            response = self.session.get(self.cpu_url, timeout=30)
+            response.raise_for_status()
             
-            # Intel Core i7 series
-            'core i7': 15000,
-            'core i7-1165g7': 9937,
-            'core i7-1185g7': 13000,
-            'core i7-1260p': 18000,
-            'core i7-1270p': 19000,
-            'core i7-1360p': 20000,
-            'core i7-1370p': 21000,
-            'core i7-14790f': 25000,
-            'core i7-8550u': 11000,
-            'core i7-8565u': 11500,
-            'core i7-8665u': 12000,
-            'core i7-10510u': 12500,
-            'core i7-10610u': 13000,
+            soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Intel Core i9 series
-            'core i9': 25000,
-            'core i9-11900h': 22000,
-            'core i9-12900h': 28000,
-            'core i9-13900h': 32000,
-            'core i9-14900h': 35000,
+            # Find the CPU table
+            cpu_table = soup.find('table', {'id': 'cputable'})
+            if not cpu_table:
+                logger.warning("CPU table not found, trying alternative selectors...")
+                cpu_table = soup.find('table', {'class': 'chart'})
             
-            # Intel Celeron series
-            'celeron': 2000,
-            'celeron dual': 1800,
-            'celeron n4020': 1543,
-            'celeron n4500': 1700,
-            'celeron n5100': 1900,
-            'celeron n6000': 2100,
-            'celeron n3350': 1200,
-            'celeron n3450': 1300,
-            'celeron n4000': 1400,
-            'celeron n4100': 1500,
+            if not cpu_table:
+                logger.error("Could not find CPU benchmark table")
+                return {}
             
-            # Intel Pentium series
-            'pentium': 3000,
-            'pentium gold': 3500,
-            'pentium silver': 2500,
+            cpu_benchmarks = {}
             
-            # AMD Ryzen series
-            'ryzen': 8000,
-            'ryzen 3': 6000,
-            'ryzen 3 3250u': 4500,
-            'ryzen 3 4300u': 5500,
-            'ryzen 3 5300u': 6500,
-            'ryzen 3 7320u': 7000,
-            'ryzen 3 pro 210': 5000,
-            'ryzen 3 pro 220': 5200,
-            'ryzen 3 2200g': 4000,
-            'ryzen 3 3200g': 4500,
+            # Parse table rows
+            rows = cpu_table.find_all('tr')[1:]  # Skip header row
+            for row in rows:
+                cells = row.find_all('td')
+                if len(cells) >= 3:
+                    try:
+                        # Extract CPU name and benchmark score
+                        cpu_name = cells[0].get_text(strip=True)
+                        benchmark_score = cells[1].get_text(strip=True)
+                        
+                        # Clean up the benchmark score
+                        benchmark_score = re.sub(r'[^\d]', '', benchmark_score)
+                        
+                        if cpu_name and benchmark_score:
+                            score = int(benchmark_score)
+                            normalized_name = self.normalize_processor_name(cpu_name)
+                            cpu_benchmarks[normalized_name] = score
+                            
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Error parsing CPU row: {e}")
+                        continue
             
-            'ryzen 5': 12000,
-            'ryzen 5 3500u': 8000,
-            'ryzen 5 4500u': 10000,
-            'ryzen 5 5500u': 12817,
-            'ryzen 5 6600u': 14000,
-            'ryzen 5 7520u': 11000,
-            'ryzen 5 7535h': 13000,
-            'ryzen 5 5500x3d': 18000,
-            'ryzen 5 pro 3500u': 8500,
-            'ryzen 5 pro 4500u': 10500,
-            'ryzen 5 2400g': 7000,
-            'ryzen 5 3400g': 8000,
-            'ryzen 5 3600': 15000,
-            'ryzen 5 3600x': 16000,
+            self.cpu_benchmarks = cpu_benchmarks
+            logger.info(f"Successfully fetched {len(cpu_benchmarks)} CPU benchmarks from PassMark")
             
-            'ryzen 7': 18000,
-            'ryzen 7 3700u': 12000,
-            'ryzen 7 4700u': 15000,
-            'ryzen 7 5700u': 15589,
-            'ryzen 7 6800u': 20000,
-            'ryzen 7 7730u': 16000,
-            'ryzen 7 h 255': 14000,
-            'ryzen 7 pro 5755g': 19000,
-            'ryzen 7 2700': 17000,
-            'ryzen 7 2700x': 18000,
-            'ryzen 7 3700x': 20000,
-            'ryzen 7 3800x': 21000,
+            # Save to cache
+            self.save_cached_benchmarks()
             
-            'ryzen 9': 25000,
-            'ryzen 9 4900h': 22000,
-            'ryzen 9 5900h': 25000,
-            'ryzen 9 6900h': 28000,
-            'ryzen 9 9850hx': 32000,
+            return cpu_benchmarks
             
-            # AMD Athlon series
-            'athlon': 3000,
-            'athlon dual': 2500,
-            'athlon 300u': 2800,
-            'athlon 3150u': 3200,
-            'athlon 4150u': 3500,
-            
-            # AMD A series (older)
-            'a6': 2000,
-            'a6-9225': 1800,
-            'a8': 2500,
-            'a10': 3000,
-            'a12': 3500,
-            
-            # Apple M series (for reference)
-            'm1': 15000,
-            'm2': 20000,
-            'm3': 25000,
-            
-            # Unknown/Generic processors
-            'unknown': 3000,
-            'apu dual': 2500,
-            'dual core': 3000,
-            'quad core': 6000,
-        }
-        
-        self.cpu_benchmarks = cpu_benchmarks
-        logger.info(f"Loaded {len(cpu_benchmarks)} CPU benchmark scores")
-        return cpu_benchmarks
+        except requests.RequestException as e:
+            logger.error(f"Error fetching CPU benchmarks from PassMark: {e}")
+            logger.info("Using cached data if available...")
+            return self.cpu_benchmarks
+        except Exception as e:
+            logger.error(f"Unexpected error fetching CPU benchmarks: {e}")
+            return {}
     
     def fetch_gpu_benchmarks(self) -> Dict[str, int]:
         """
@@ -416,112 +330,164 @@ class BenchmarkScraper:
         """
         logger.info("Fetching GPU benchmarks from PassMark...")
         
-        # Common GPU models and their approximate benchmark scores
-        # This is a curated list based on PassMark data
-        gpu_benchmarks = {
-            # Integrated Graphics
-            'intel uhd graphics': 800,
-            'intel uhd graphics 600': 600,
-            'intel uhd graphics 610': 700,
-            'intel uhd graphics 620': 800,
-            'intel uhd graphics 630': 900,
-            'intel uhd graphics 640': 1000,
-            'intel uhd graphics 650': 1100,
-            'intel uhd graphics 730': 1200,
-            'intel uhd graphics 750': 1300,
-            'intel uhd graphics 770': 1400,
-            'intel iris xe graphics': 1500,
-            'intel iris xe graphics g4': 1400,
-            'intel iris xe graphics g7': 1600,
-            'intel iris xe graphics g7 96eu': 1700,
+        try:
+            # Add delay to be respectful to the server
+            time.sleep(random.uniform(1, 3))
             
-            # AMD Integrated Graphics
-            'amd radeon graphics': 1000,
-            'amd radeon vega 3': 800,
-            'amd radeon vega 5': 1000,
-            'amd radeon vega 6': 1200,
-            'amd radeon vega 7': 1400,
-            'amd radeon vega 8': 1600,
-            'amd radeon vega 10': 1800,
-            'amd radeon vega 11': 2000,
-            'amd radeon 610m': 600,
-            'amd radeon 660m': 1200,
-            'amd radeon 680m': 2000,
-            'amd radeon 780m': 2500,
-            'amd radeon vega 8 graphics': 1600,
-            'amd radeon vega 7 graphics': 1400,
+            response = self.session.get(self.gpu_url, timeout=30)
+            response.raise_for_status()
             
-            # NVIDIA GeForce GTX Series
-            'geforce gtx 1050': 3000,
-            'geforce gtx 1050 ti': 3500,
-            'geforce gtx 1060': 5000,
-            'geforce gtx 1650': 4000,
-            'geforce gtx 1650 ti': 4500,
-            'geforce gtx 1660': 6000,
-            'geforce gtx 1660 ti': 7000,
+            soup = BeautifulSoup(response.content, 'html.parser')
             
-            # NVIDIA GeForce RTX Series
-            'geforce rtx 2050': 3500,
-            'geforce rtx 3050': 5000,
-            'geforce rtx 3050 ti': 6000,
-            'geforce rtx 3060': 8000,
-            'geforce rtx 3070': 12000,
-            'geforce rtx 3080': 16000,
-            'geforce rtx 3090': 20000,
-            'geforce rtx 4050': 4500,
-            'geforce rtx 4060': 7000,
-            'geforce rtx 4070': 10000,
-            'geforce rtx 4080': 14000,
-            'geforce rtx 4090': 18000,
-            'geforce rtx 5070 ti': 13000,
-            'geforce rtx 4080 super': 14500,
-            'geforce rtx 4070 ti super': 11500,
+            # Find the GPU table
+            gpu_table = soup.find('table', {'id': 'cputable'})
+            if not gpu_table:
+                logger.warning("GPU table not found, trying alternative selectors...")
+                gpu_table = soup.find('table', {'class': 'chart'})
             
-            # NVIDIA Quadro Series
-            'quadro t500': 2000,
-            'quadro t600': 2500,
-            'quadro t1000': 3500,
-            'quadro t2000': 5000,
-            'quadro rtx 3000': 8000,
-            'quadro rtx 4000': 12000,
-            'quadro rtx 5000': 16000,
-            'rtx pro 6000': 18000,
+            if not gpu_table:
+                logger.error("Could not find GPU benchmark table")
+                return {}
             
-            # AMD Radeon RX Series
-            'radeon rx 550': 2000,
-            'radeon rx 560': 2500,
-            'radeon rx 570': 4000,
-            'radeon rx 580': 5000,
-            'radeon rx 590': 6000,
-            'radeon rx 5500': 5000,
-            'radeon rx 5600': 7000,
-            'radeon rx 5700': 10000,
-            'radeon rx 6600': 8000,
-            'radeon rx 6700': 12000,
-            'radeon rx 6800': 15000,
-            'radeon rx 6900': 18000,
-            'radeon rx 7600': 7000,
-            'radeon rx 7700': 10000,
-            'radeon rx 7800': 13000,
-            'radeon rx 7900': 17000,
+            gpu_benchmarks = {}
             
-            # AMD Radeon Pro Series
-            'radeon pro 5300': 4000,
-            'radeon pro 5500': 6000,
-            'radeon pro 5600': 8000,
-            'radeon pro 5700': 10000,
-            'radeon pro 5800': 12000,
+            # Parse table rows
+            rows = gpu_table.find_all('tr')[1:]  # Skip header row
+            for row in rows:
+                cells = row.find_all('td')
+                if len(cells) >= 3:
+                    try:
+                        # Extract GPU name and benchmark score
+                        gpu_name = cells[0].get_text(strip=True)
+                        benchmark_score = cells[1].get_text(strip=True)
+                        
+                        # Clean up the benchmark score
+                        benchmark_score = re.sub(r'[^\d]', '', benchmark_score)
+                        
+                        if gpu_name and benchmark_score:
+                            score = int(benchmark_score)
+                            normalized_name = self.normalize_gpu_name(gpu_name)
+                            gpu_benchmarks[normalized_name] = score
+                            
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Error parsing GPU row: {e}")
+                        continue
             
-            # Unknown/No dedicated graphics
-            'unknown': 500,
-            '0': 500,
-            'integrated': 800,
-            'onboard': 800,
-        }
+            self.gpu_benchmarks = gpu_benchmarks
+            logger.info(f"Successfully fetched {len(gpu_benchmarks)} GPU benchmarks from PassMark")
+            
+            # Save to cache
+            self.save_cached_benchmarks()
+            
+            return gpu_benchmarks
+            
+        except requests.RequestException as e:
+            logger.error(f"Error fetching GPU benchmarks from PassMark: {e}")
+            logger.info("Using cached data if available...")
+            return self.gpu_benchmarks
+        except Exception as e:
+            logger.error(f"Unexpected error fetching GPU benchmarks: {e}")
+            return {}
+    
+    def search_cpu_benchmark(self, processor_name: str) -> Optional[int]:
+        """
+        Search for CPU benchmark score on PassMark website.
         
-        self.gpu_benchmarks = gpu_benchmarks
-        logger.info(f"Loaded {len(gpu_benchmarks)} GPU benchmark scores")
-        return gpu_benchmarks
+        Args:
+            processor_name (str): Processor name to search for
+            
+        Returns:
+            Optional[int]: Benchmark score if found, None otherwise
+        """
+        try:
+            # Normalize processor name for search
+            search_term = self.normalize_processor_name(processor_name)
+            
+            # Create search URL
+            search_url = f"https://www.cpubenchmark.net/cpu.php?cpu={quote(search_term)}"
+            
+            # Add delay to be respectful
+            time.sleep(random.uniform(2, 4))
+            
+            response = self.session.get(search_url, timeout=30)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Look for benchmark score in the page
+            # Common patterns for PassMark CPU pages
+            score_patterns = [
+                r'PassMark CPU Mark: (\d+)',
+                r'CPU Mark: (\d+)',
+                r'Benchmark: (\d+)',
+                r'Score: (\d+)'
+            ]
+            
+            page_text = soup.get_text()
+            for pattern in score_patterns:
+                match = re.search(pattern, page_text, re.IGNORECASE)
+                if match:
+                    return int(match.group(1))
+            
+            # If no score found, try to find it in the cached data
+            if search_term in self.cpu_benchmarks:
+                return self.cpu_benchmarks[search_term]
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Error searching CPU benchmark for {processor_name}: {e}")
+            return None
+    
+    def search_gpu_benchmark(self, gpu_name: str) -> Optional[int]:
+        """
+        Search for GPU benchmark score on PassMark website.
+        
+        Args:
+            gpu_name (str): GPU name to search for
+            
+        Returns:
+            Optional[int]: Benchmark score if found, None otherwise
+        """
+        try:
+            # Normalize GPU name for search
+            search_term = self.normalize_gpu_name(gpu_name)
+            
+            # Create search URL
+            search_url = f"https://www.videocardbenchmark.net/gpu.php?gpu={quote(search_term)}"
+            
+            # Add delay to be respectful
+            time.sleep(random.uniform(2, 4))
+            
+            response = self.session.get(search_url, timeout=30)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Look for benchmark score in the page
+            # Common patterns for PassMark GPU pages
+            score_patterns = [
+                r'PassMark G3D Mark: (\d+)',
+                r'G3D Mark: (\d+)',
+                r'Benchmark: (\d+)',
+                r'Score: (\d+)'
+            ]
+            
+            page_text = soup.get_text()
+            for pattern in score_patterns:
+                match = re.search(pattern, page_text, re.IGNORECASE)
+                if match:
+                    return int(match.group(1))
+            
+            # If no score found, try to find it in the cached data
+            if search_term in self.gpu_benchmarks:
+                return self.gpu_benchmarks[search_term]
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Error searching GPU benchmark for {gpu_name}: {e}")
+            return None
     
     def get_cpu_benchmark_score(self, processor_name: str) -> int:
         """
@@ -549,27 +515,18 @@ class BenchmarkScraper:
         if best_pattern and match_score > 0.1:  # Threshold for acceptable match
             return self.cpu_benchmarks[best_pattern]
         
-        # Fallback to family-based matching using KMP
-        family_patterns = {
-            'core i3': ['i3', 'core i3'],
-            'core i5': ['i5', 'core i5'],
-            'core i7': ['i7', 'core i7'],
-            'core i9': ['i9', 'core i9'],
-            'ryzen 3': ['ryzen 3'],
-            'ryzen 5': ['ryzen 5'],
-            'ryzen 7': ['ryzen 7'],
-            'ryzen 9': ['ryzen 9'],
-            'celeron': ['celeron'],
-            'athlon': ['athlon'],
-            'ryzen': ['ryzen']
-        }
+        # If no match found in cache, try to search online
+        logger.info(f"CPU benchmark not found in cache for {processor_name}, searching online...")
+        online_score = self.search_cpu_benchmark(processor_name)
         
-        for family, patterns in family_patterns.items():
-            if self.kmp.search_case_insensitive(normalized_name, patterns[0]):
-                return self.cpu_benchmarks.get(family, 3000)
+        if online_score:
+            # Cache the result
+            self.cpu_benchmarks[normalized_name] = online_score
+            self.save_cached_benchmarks()
+            return online_score
         
         # Default score for unknown processors
-        return self.cpu_benchmarks.get('unknown', 3000)
+        return 3000
     
     def get_gpu_benchmark_score(self, gpu_name: str) -> int:
         """
@@ -597,21 +554,18 @@ class BenchmarkScraper:
         if best_pattern and match_score > 0.1:  # Threshold for acceptable match
             return self.gpu_benchmarks[best_pattern]
         
-        # Fallback to family-based matching using KMP
-        family_patterns = {
-            'intel uhd graphics': ['uhd', 'intel'],
-            'amd radeon vega 8': ['radeon', 'vega'],
-            'amd radeon graphics': ['radeon'],
-            'geforce gtx 1050': ['geforce'],
-            'quadro t1000': ['quadro']
-        }
+        # If no match found in cache, try to search online
+        logger.info(f"GPU benchmark not found in cache for {gpu_name}, searching online...")
+        online_score = self.search_gpu_benchmark(gpu_name)
         
-        for family, patterns in family_patterns.items():
-            if self.kmp.search_case_insensitive(normalized_name, patterns[0]):
-                return self.gpu_benchmarks.get(family, 500)
+        if online_score:
+            # Cache the result
+            self.gpu_benchmarks[normalized_name] = online_score
+            self.save_cached_benchmarks()
+            return online_score
         
         # Default score for unknown GPUs (integrated graphics)
-        return self.gpu_benchmarks.get('unknown', 500)
+        return 500
     
     def _extract_cpu_benchmark_with_regex(self, text: str) -> int:
         """
@@ -710,6 +664,13 @@ class BenchmarkScraper:
                     if family in self.cpu_benchmarks:
                         return self.cpu_benchmarks[family]
         
+        # Use KMP algorithm for efficient pattern matching with cached data
+        cpu_patterns_list = list(self.cpu_benchmarks.keys())
+        best_pattern, match_score = self.kmp.find_best_match(text_lower, cpu_patterns_list)
+        
+        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
+            return self.cpu_benchmarks[best_pattern]
+        
         # Fallback to family-based matching
         family_keywords = {
             'core i3': ['i3', 'core i3'],
@@ -732,7 +693,7 @@ class BenchmarkScraper:
                     return self.cpu_benchmarks.get(family, 3000)
         
         # Default score for unknown processors
-        return self.cpu_benchmarks.get('unknown', 3000)
+        return 3000
     
     def _extract_gpu_benchmark_with_regex(self, text: str) -> int:
         """
@@ -827,6 +788,13 @@ class BenchmarkScraper:
                     if family in self.gpu_benchmarks:
                         return self.gpu_benchmarks[family]
         
+        # Use KMP algorithm for efficient pattern matching with cached data
+        gpu_patterns_list = list(self.gpu_benchmarks.keys())
+        best_pattern, match_score = self.kmp.find_best_match(text_lower, gpu_patterns_list)
+        
+        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
+            return self.gpu_benchmarks[best_pattern]
+        
         # Fallback to family-based matching
         family_keywords = {
             'intel uhd graphics': ['uhd', 'intel uhd'],
@@ -846,7 +814,257 @@ class BenchmarkScraper:
                     return self.gpu_benchmarks.get(family, 500)
         
         # Default score for unknown GPUs (integrated graphics)
-        return self.gpu_benchmarks.get('unknown', 500)
+        return 500
+    
+    def _extract_ram_from_text(self, text: str) -> Optional[float]:
+        """
+        Extract RAM capacity from text using regex patterns.
+        
+        Args:
+            text (str): Text containing RAM information
+            
+        Returns:
+            Optional[float]: RAM capacity in GB, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # RAM patterns with various formats
+        ram_patterns = [
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*|ram|memory)',  # 8GB DDR4, 16GB RAM
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*)',  # 8GB DDR4
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ram)',  # 8GB RAM
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:memory)',  # 8GB Memory
+            r'(\d+(?:\.\d+)?)\s*gb',  # 8GB (fallback)
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ddr\d*|ram|memory)',  # 1TB DDR4
+            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback)
+        ]
+        
+        for pattern in ram_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                value = float(matches[0])
+                # Convert TB to GB
+                if 'tb' in text_str and 'gb' not in text_str:
+                    value *= 1024
+                return value
+        
+        return None
+    
+    def _extract_storage_from_text(self, text: str) -> Optional[float]:
+        """
+        Extract storage capacity from text using regex patterns.
+        
+        Args:
+            text (str): Text containing storage information
+            
+        Returns:
+            Optional[float]: Storage capacity in GB, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # Storage patterns with various formats - prioritize storage-specific terms
+        storage_patterns = [
+            # High priority: explicit storage terms with capacity
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 1TB SSD, 2TB NVMe
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|nvme|pcie)',  # 1TB SSD, 2TB NVMe
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 512GB SSD, 1TB HDD
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|nvme|pcie)',  # 512GB SSD
+            
+            # Medium priority: storage with less specific terms
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:hard\s*drive|storage)',  # 1TB hard drive
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:hard\s*drive|storage)',  # 512GB hard drive
+            
+            # Lower priority: just numbers with storage context
+            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback, but check context)
+            r'(\d+(?:\.\d+)?)\s*gb',  # 512GB (fallback, but check context)
+        ]
+        
+        # First try high-priority patterns
+        for i, pattern in enumerate(storage_patterns):
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                value = float(matches[0])
+                
+                # Check if this pattern matched TB or GB
+                # Look for the pattern in the original text to see the unit
+                pattern_match = re.search(pattern, text_str, re.IGNORECASE)
+                if pattern_match:
+                    matched_text = pattern_match.group(0).lower()
+                    # If the pattern contains TB, convert to GB
+                    if 'tb' in matched_text and 'gb' not in matched_text[:matched_text.find('tb')]:
+                        value *= 1024
+                
+                # For lower priority patterns, verify it's actually storage
+                if i >= 6:  # Lower priority patterns
+                    # Check if this might be RAM instead of storage
+                    if any(term in text_str for term in ['ram', 'memory', 'ddr', 'lpddr']):
+                        # Skip if this looks like RAM
+                        continue
+                
+                return value
+        
+        return None
+    
+    def _extract_screen_size_from_text(self, text: str) -> Optional[float]:
+        """
+        Extract screen size from text using regex patterns.
+        
+        Args:
+            text (str): Text containing screen size information
+            
+        Returns:
+            Optional[float]: Screen size in inches, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # Screen size patterns
+        screen_patterns = [
+            r'(\d+(?:\.\d+)?)\s*inch',  # 15.6 inch
+            r'(\d+(?:\.\d+)?)\s*"',  # 15.6"
+            r'(\d+(?:\.\d+)?)\s*in',  # 15.6 in
+            r'(\d+(?:\.\d+)?)\s*inches',  # 15.6 inches
+        ]
+        
+        for pattern in screen_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                return float(matches[0])
+        
+        return None
+    
+    def _extract_storage_type_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract storage type from text using regex patterns.
+        
+        Args:
+            text (str): Text containing storage type information
+            
+        Returns:
+            Optional[str]: Storage type (SSD, HDD, Hybrid, etc.), None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # Storage type patterns
+        if 'ssd' in text_str:
+            if 'nvme' in text_str:
+                return 'NVMe SSD'
+            elif 'pcie' in text_str:
+                return 'PCIe SSD'
+            else:
+                return 'SSD'
+        elif 'hdd' in text_str or 'hard drive' in text_str or 'hard disk' in text_str:
+            return 'HDD'
+        elif 'hybrid' in text_str or 'sshdd' in text_str:
+            return 'Hybrid'
+        elif 'emmc' in text_str:
+            return 'eMMC'
+        elif 'flash' in text_str:
+            return 'Flash Storage'
+        
+        return None
+    
+    def _extract_ram_type_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract RAM type from text using regex patterns.
+        
+        Args:
+            text (str): Text containing RAM type information
+            
+        Returns:
+            Optional[str]: RAM type (DDR4, DDR5, LPDDR4, etc.), None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # RAM type patterns
+        ram_types = ['ddr5', 'ddr4', 'ddr3', 'lpddr5', 'lpddr4', 'lpddr3']
+        
+        for ram_type in ram_types:
+            if ram_type in text_str:
+                return ram_type.upper()
+        
+        return None
+    
+    def _extract_processor_model_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract processor model from text using regex patterns.
+        
+        Args:
+            text (str): Text containing processor information
+            
+        Returns:
+            Optional[str]: Processor model, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # Processor patterns
+        processor_patterns = [
+            r'(intel\s+core\s+i[3579]-\d+[a-z]*\d*)',  # Intel Core i5-1135G7
+            r'(amd\s+ryzen\s+[3579]\s+\d+[a-z]*\d*)',  # AMD Ryzen 5 5500U
+            r'(intel\s+celeron\s+[a-z]*\d*)',  # Intel Celeron N4020
+            r'(intel\s+pentium\s+[a-z]*\d*)',  # Intel Pentium Gold 7505
+            r'(amd\s+athlon\s+\d+[a-z]*)',  # AMD Athlon 300U
+            r'(apple\s+m\d+\s*[a-z]*)',  # Apple M1 Pro
+        ]
+        
+        for pattern in processor_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                return matches[0].title()
+        
+        return None
+    
+    def _extract_gpu_model_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract GPU model from text using regex patterns.
+        
+        Args:
+            text (str): Text containing GPU information
+            
+        Returns:
+            Optional[str]: GPU model, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # GPU patterns
+        gpu_patterns = [
+            r'(intel\s+uhd\s+graphics\s*\d*)',  # Intel UHD Graphics 600
+            r'(intel\s+iris\s+xe\s+graphics\s*[a-z0-9]*)',  # Intel Iris Xe Graphics G7
+            r'(amd\s+radeon\s+vega\s*\d+)',  # AMD Radeon Vega 7
+            r'(amd\s+radeon\s+graphics)',  # AMD Radeon Graphics
+            r'(nvidia\s+geforce\s+gtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce GTX 1650
+            r'(nvidia\s+geforce\s+rtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce RTX 3060
+            r'(nvidia\s+quadro\s*[a-z0-9]+)',  # NVIDIA Quadro T1000
+            r'(amd\s+radeon\s+rx\s*\d{4}[a-z]*)',  # AMD Radeon RX 5500M
+            r'(amd\s+radeon\s+pro\s*\d{4}[a-z]*)',  # AMD Radeon Pro 5500M
+        ]
+        
+        for pattern in gpu_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                return matches[0].title()
+        
+        return None
     
     def _get_cpu_benchmark_from_columns(self, row: pd.Series) -> int:
         """
@@ -1087,17 +1305,92 @@ class BenchmarkScraper:
         debug_info['final_score'] = default_score
         return debug_info
     
+    def get_specification_statistics(self, df: pd.DataFrame) -> Dict:
+        """
+        Get statistics about extracted specifications in the dataset.
+        
+        Args:
+            df (pd.DataFrame): Dataframe with specification columns
+            
+        Returns:
+            Dict: Statistics about specifications
+        """
+        stats = {}
+        
+        # RAM statistics
+        if 'ram_gb' in df.columns:
+            ram_stats = df['ram_gb'].describe()
+            stats['ram_stats'] = {
+                'mean': float(ram_stats['mean']) if not pd.isna(ram_stats['mean']) else None,
+                'median': float(df['ram_gb'].median()) if not df['ram_gb'].isna().all() else None,
+                'min': int(ram_stats['min']) if not pd.isna(ram_stats['min']) else None,
+                'max': int(ram_stats['max']) if not pd.isna(ram_stats['max']) else None,
+                'std': float(ram_stats['std']) if not pd.isna(ram_stats['std']) else None,
+                'total_found': int(df['ram_gb'].notna().sum()),
+                'total_rows': len(df)
+            }
+            
+            if 'ram_category' in df.columns:
+                stats['ram_category_distribution'] = df['ram_category'].value_counts().to_dict()
+        
+        # Storage statistics
+        if 'storage_gb' in df.columns:
+            storage_stats = df['storage_gb'].describe()
+            stats['storage_stats'] = {
+                'mean': float(storage_stats['mean']) if not pd.isna(storage_stats['mean']) else None,
+                'median': float(df['storage_gb'].median()) if not df['storage_gb'].isna().all() else None,
+                'min': int(storage_stats['min']) if not pd.isna(storage_stats['min']) else None,
+                'max': int(storage_stats['max']) if not pd.isna(storage_stats['max']) else None,
+                'std': float(storage_stats['std']) if not pd.isna(storage_stats['std']) else None,
+                'total_found': int(df['storage_gb'].notna().sum()),
+                'total_rows': len(df)
+            }
+            
+            if 'storage_category' in df.columns:
+                stats['storage_category_distribution'] = df['storage_category'].value_counts().to_dict()
+            
+            if 'storage_type' in df.columns:
+                stats['storage_type_distribution'] = df['storage_type'].value_counts().to_dict()
+        
+        # Screen size statistics
+        if 'screen_size_inches' in df.columns:
+            screen_stats = df['screen_size_inches'].describe()
+            stats['screen_stats'] = {
+                'mean': float(screen_stats['mean']) if not pd.isna(screen_stats['mean']) else None,
+                'median': float(df['screen_size_inches'].median()) if not df['screen_size_inches'].isna().all() else None,
+                'min': float(screen_stats['min']) if not pd.isna(screen_stats['min']) else None,
+                'max': float(screen_stats['max']) if not pd.isna(screen_stats['max']) else None,
+                'std': float(screen_stats['std']) if not pd.isna(screen_stats['std']) else None,
+                'total_found': int(df['screen_size_inches'].notna().sum()),
+                'total_rows': len(df)
+            }
+            
+            if 'screen_category' in df.columns:
+                stats['screen_category_distribution'] = df['screen_category'].value_counts().to_dict()
+        
+        # Processor and GPU model distributions
+        if 'processor_model' in df.columns:
+            stats['processor_model_distribution'] = df['processor_model'].value_counts().head(10).to_dict()
+        
+        if 'gpu_model' in df.columns:
+            stats['gpu_model_distribution'] = df['gpu_model'].value_counts().head(10).to_dict()
+        
+        if 'ram_type' in df.columns:
+            stats['ram_type_distribution'] = df['ram_type'].value_counts().to_dict()
+        
+        return stats
+
     def add_benchmark_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Add CPU and GPU benchmark scores to the dataframe.
+        Add CPU and GPU benchmark scores and specifications to the dataframe.
         
         Args:
             df (pd.DataFrame): Input dataframe with processor and GPU information
             
         Returns:
-            pd.DataFrame: Dataframe with added benchmark scores
+            pd.DataFrame: Dataframe with added benchmark scores and specifications
         """
-        logger.info("Adding benchmark scores to dataset...")
+        logger.info("Adding benchmark scores and specifications to dataset...")
         
         # Ensure we have benchmark data
         if not self.cpu_benchmarks:
@@ -1105,16 +1398,19 @@ class BenchmarkScraper:
         if not self.gpu_benchmarks:
             self.fetch_gpu_benchmarks()
         
+        # First, extract specifications from text columns
+        df_with_specs = self.add_specifications_from_columns(df)
+        
         # Add CPU benchmark scores by searching in title_y, features, and details columns
-        df['cpu_benchmark_score'] = df.apply(self._get_cpu_benchmark_from_columns, axis=1)
+        df_with_specs['cpu_benchmark_score'] = df_with_specs.apply(self._get_cpu_benchmark_from_columns, axis=1)
         
         # Add GPU benchmark scores by searching in title_y, features, and details columns
-        df['gpu_benchmark_score'] = df.apply(self._get_gpu_benchmark_from_columns, axis=1)
+        df_with_specs['gpu_benchmark_score'] = df_with_specs.apply(self._get_gpu_benchmark_from_columns, axis=1)
         
         # Calculate total benchmark score (weighted combination)
-        df['total_benchmark_score'] = (
-            df['cpu_benchmark_score'] * 0.7 +  # CPU has higher weight
-            df['gpu_benchmark_score'] * 0.3
+        df_with_specs['total_benchmark_score'] = (
+            df_with_specs['cpu_benchmark_score'] * 0.7 +  # CPU has higher weight
+            df_with_specs['gpu_benchmark_score'] * 0.3
         ).round(0)
         
         # Add performance tier based on total benchmark score
@@ -1132,7 +1428,7 @@ class BenchmarkScraper:
             else:
                 return 'Low'
         
-        df['performance_tier'] = df['total_benchmark_score'].apply(get_performance_tier)
+        df_with_specs['performance_tier'] = df_with_specs['total_benchmark_score'].apply(get_performance_tier)
         
         # Add gaming capability score
         def get_gaming_capability(row):
@@ -1150,10 +1446,139 @@ class BenchmarkScraper:
             else:
                 return 'No Gaming'
         
-        df['gaming_capability'] = df.apply(get_gaming_capability, axis=1)
+        df_with_specs['gaming_capability'] = df_with_specs.apply(get_gaming_capability, axis=1)
         
-        logger.info("Benchmark scores added successfully")
-        return df
+        logger.info("Benchmark scores and specifications added successfully")
+        return df_with_specs
+    
+    def add_specifications_from_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Extract and add laptop specifications from title_y, features, and details columns.
+        
+        Args:
+            df (pd.DataFrame): Input dataframe with title_y, features, and details columns
+            
+        Returns:
+            pd.DataFrame: Dataframe with added specification columns
+        """
+        logger.info("Extracting laptop specifications from columns...")
+        
+        df_specs = df.copy()
+        
+        # Combine text from all relevant columns for each row
+        def combine_text_columns(row):
+            text_parts = []
+            
+            # Add title_y if it exists
+            if 'title_y' in row.index and pd.notna(row['title_y']):
+                text_parts.append(str(row['title_y']))
+            
+            # Add features if it exists
+            if 'features' in row.index and pd.notna(row['features']):
+                text_parts.append(str(row['features']))
+            
+            # Add details if it exists
+            if 'details' in row.index and pd.notna(row['details']):
+                text_parts.append(str(row['details']))
+            
+            # Add details_parsed if it exists (processed details)
+            if 'details_parsed' in row.index and pd.notna(row['details_parsed']):
+                details_text = str(row['details_parsed'])
+                text_parts.append(details_text)
+            
+            return ' '.join(text_parts)
+        
+        # Extract specifications for each row
+        df_specs['ram_gb'] = df_specs.apply(
+            lambda row: self._extract_ram_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['storage_gb'] = df_specs.apply(
+            lambda row: self._extract_storage_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['screen_size_inches'] = df_specs.apply(
+            lambda row: self._extract_screen_size_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['storage_type'] = df_specs.apply(
+            lambda row: self._extract_storage_type_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['ram_type'] = df_specs.apply(
+            lambda row: self._extract_ram_type_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['processor_model'] = df_specs.apply(
+            lambda row: self._extract_processor_model_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['gpu_model'] = df_specs.apply(
+            lambda row: self._extract_gpu_model_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        # Add storage categories
+        def get_storage_category(storage_gb):
+            if pd.isna(storage_gb):
+                return 'Unknown'
+            elif storage_gb < 256:
+                return 'Small (<256GB)'
+            elif storage_gb < 512:
+                return 'Medium (256-512GB)'
+            elif storage_gb < 1000:
+                return 'Large (512GB-1TB)'
+            else:
+                return 'Very Large (>1TB)'
+        
+        df_specs['storage_category'] = df_specs['storage_gb'].apply(get_storage_category)
+        
+        # Add storage display values (in appropriate units)
+        def get_storage_display(storage_gb):
+            if pd.isna(storage_gb):
+                return None
+            elif storage_gb >= 1024:
+                return f"{storage_gb/1024:.1f}TB"
+            else:
+                return f"{storage_gb:.0f}GB"
+        
+        df_specs['storage_display'] = df_specs['storage_gb'].apply(get_storage_display)
+        
+        # Add RAM categories
+        def get_ram_category(ram_gb):
+            if pd.isna(ram_gb):
+                return 'Unknown'
+            elif ram_gb < 8:
+                return 'Low (<8GB)'
+            elif ram_gb < 16:
+                return 'Medium (8-16GB)'
+            elif ram_gb < 32:
+                return 'High (16-32GB)'
+            else:
+                return 'Very High (>32GB)'
+        
+        df_specs['ram_category'] = df_specs['ram_gb'].apply(get_ram_category)
+        
+        # Add screen size categories
+        def get_screen_category(screen_inches):
+            if pd.isna(screen_inches):
+                return 'Unknown'
+            elif screen_inches < 13:
+                return 'Small (<13")'
+            elif screen_inches < 15:
+                return 'Medium (13-15")'
+            elif screen_inches < 17:
+                return 'Large (15-17")'
+            else:
+                return 'Very Large (>17")'
+        
+        df_specs['screen_category'] = df_specs['screen_size_inches'].apply(get_screen_category)
+        
+        logger.info("Specifications extracted successfully")
+        logger.info(f"RAM found: {df_specs['ram_gb'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"Storage found: {df_specs['storage_gb'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"Screen size found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
+        
+        return df_specs
     
     def get_benchmark_statistics(self, df: pd.DataFrame) -> Dict:
         """
@@ -1327,10 +1752,29 @@ def main():
     print(result[['title_y', 'cpu_benchmark_score', 'gpu_benchmark_score', 
                  'total_benchmark_score', 'performance_tier', 'gaming_capability']])
     
+    print("\nSample specification results:")
+    spec_columns = ['ram_gb', 'storage_gb', 'screen_size_inches', 'storage_type', 
+                   'ram_type', 'processor_model', 'gpu_model', 'storage_category', 
+                   'ram_category', 'screen_category']
+    available_spec_cols = [col for col in spec_columns if col in result.columns]
+    if available_spec_cols:
+        print(result[['title_y'] + available_spec_cols])
+    
     # Get statistics
     stats = scraper.get_benchmark_statistics(result)
     print("\nBenchmark statistics:")
     print(json.dumps(stats, indent=2))
+    
+    # Get specification statistics
+    spec_stats = scraper.get_specification_statistics(result)
+    print("\nSpecification statistics:")
+    print(json.dumps(spec_stats, indent=2))
+    
+    # Show all columns in the result
+    print(f"\nTotal columns in result: {len(result.columns)}")
+    print("All columns:")
+    for i, col in enumerate(result.columns):
+        print(f"  {i+1:2d}. {col}")
 
 
 if __name__ == "__main__":
