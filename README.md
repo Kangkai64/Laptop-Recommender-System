@@ -1,10 +1,9 @@
-# Laptop Recommender System with MCP
+# Laptop Recommender System
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![MCP](https://img.shields.io/badge/MCP-1.0+-orange.svg)](https://modelcontextprotocol.io/)
 
-A comprehensive laptop recommendation system built using the Model Context Protocol (MCP) that provides intelligent laptop suggestions based on user preferences, specifications, and similarity analysis. The system leverages machine learning algorithms to deliver personalized recommendations that match user requirements with high accuracy.
+A comprehensive laptop recommendation system that provides intelligent laptop suggestions based on user preferences, specifications, and similarity analysis. The system leverages machine learning algorithms to deliver personalized recommendations that match user requirements with high accuracy.
 
 ## 📋 Table of Contents
 
@@ -14,9 +13,6 @@ A comprehensive laptop recommendation system built using the Model Context Proto
 - [Algorithms](#algorithms)
 - [Installation](#installation)
 - [Usage](#usage)
-- [MCP Integration](#mcp-integration)
-- [API Reference](#api-reference)
-- [Examples](#examples)
 - [Technical Details](#technical-details)
 - [Performance](#performance)
 - [Contributing](#contributing)
@@ -45,7 +41,6 @@ The Laptop Recommender System aims to achieve the following objectives:
 - **🔍 Similarity Analysis**: Find laptops similar to a given model using advanced content-based filtering
 - **🔎 Advanced Search**: Multi-criteria search across brands, processors, and specifications
 - **📊 Detailed Analytics**: Comprehensive dataset statistics and insights
-- **🤖 MCP Integration**: Full Model Context Protocol support for seamless AI assistant integration
 
 ### Advanced Features
 - **Hybrid Recommendation Engine**: Combines content-based and collaborative filtering
@@ -168,12 +163,6 @@ The preprocessing pipeline extracts and creates additional features:
    ```bash
    python run_preprocessing.py
    ```
-
-4. **Start the MCP server**
-   ```bash
-   python laptop_recommender_mcp.py
-   ```
-
 ### Manual Installation
 
 1. **Create virtual environment**
@@ -186,7 +175,6 @@ The preprocessing pipeline extracts and creates additional features:
    ```bash
    pip install pandas numpy scikit-learn matplotlib seaborn
    pip install datasets transformers torch
-   pip install mcp-server
    ```
 
 ## 📖 Usage
@@ -236,74 +224,6 @@ The preprocessing pipeline extracts and creates additional features:
    explorer.generate_report()
    ```
 
-3. **Recommendation System**
-   ```python
-   from laptop_recommender_mcp import LaptopRecommenderMCP
-   
-   recommender = LaptopRecommenderMCP()
-   recommendations = recommender.get_recommendations(
-       budget=1000,
-       brand_preference="Dell",
-       use_case="gaming"
-   )
-   ```
-
-### MCP Integration
-
-The system provides a Model Context Protocol (MCP) server that can be integrated with AI assistants:
-
-```json
-{
-  "mcpServers": {
-    "laptop-recommender": {
-      "command": "python",
-      "args": ["laptop_recommender_mcp.py"],
-      "env": {
-        "PYTHONPATH": "."
-      }
-    }
-  }
-}
-```
-
-### API Endpoints
-
-The MCP server provides the following endpoints:
-
-- `get_recommendations`: Get personalized laptop recommendations
-- `find_similar_laptops`: Find laptops similar to a given model
-- `search_laptops`: Search laptops by criteria
-- `get_dataset_stats`: Get dataset statistics
-- `analyze_preferences`: Analyze user preferences
-
-## 🔧 MCP Integration
-
-### Server Configuration
-
-The MCP server is configured in `mcp_config.json`:
-
-```json
-{
-  "name": "laptop-recommender",
-  "version": "1.0.0",
-  "description": "Laptop recommendation system with MCP integration",
-  "tools": [
-    {
-      "name": "get_recommendations",
-      "description": "Get personalized laptop recommendations",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "budget": {"type": "number"},
-          "brand_preference": {"type": "string"},
-          "use_case": {"type": "string"}
-        }
-      }
-    }
-  ]
-}
-```
-
 ### Tool Definitions
 
 #### 1. get_recommendations
@@ -340,8 +260,6 @@ Searches laptops by various criteria.
 **Returns:**
 - Filtered and sorted list of laptops
 
-## 📊 API Reference
-
 ### Core Classes
 
 #### LaptopDataPreprocessor
@@ -367,70 +285,6 @@ class LaptopDataExplorer:
     def analyze_reviews() -> Dict
     def create_visualizations(save_path: str)
     def generate_report(output_path: str)
-```
-
-#### LaptopRecommenderMCP
-MCP server for laptop recommendations.
-
-```python
-class LaptopRecommenderMCP:
-    def get_recommendations(params: Dict) -> List[Dict]
-    def find_similar_laptops(laptop_id: str, limit: int) -> List[Dict]
-    def search_laptops(query: str, filters: Dict) -> List[Dict]
-    def get_dataset_stats() -> Dict
-```
-
-## 💡 Examples
-
-### Example 1: Basic Recommendations
-
-```python
-from laptop_recommender_mcp import LaptopRecommenderMCP
-
-recommender = LaptopRecommenderMCP()
-
-# Get recommendations for a gaming laptop under $1500
-recommendations = recommender.get_recommendations({
-    "budget": 1500,
-    "use_case": "gaming",
-    "brand_preference": "ASUS"
-})
-
-for laptop in recommendations[:3]:
-    print(f"{laptop['brand']} {laptop['title']}")
-    print(f"Price: ${laptop['price']}")
-    print(f"Rating: {laptop['rating']}/5")
-    print(f"Score: {laptop['score']:.3f}")
-    print("---")
-```
-
-### Example 2: Similar Laptops
-
-```python
-# Find laptops similar to a specific model
-similar_laptops = recommender.find_similar_laptops(
-    laptop_id="B08DX82SD8",
-    limit=5
-)
-
-for laptop in similar_laptops:
-    print(f"{laptop['brand']} - Similarity: {laptop['similarity']:.3f}")
-```
-
-### Example 3: Advanced Search
-
-```python
-# Search for laptops with specific criteria
-search_results = recommender.search_laptops(
-    query="gaming laptop",
-    filters={
-        "min_rating": 4.0,
-        "max_price": 2000,
-        "brands": ["Dell", "ASUS", "Lenovo"]
-    },
-    sort_by="rating",
-    limit=10
-)
 ```
 
 ## 🔬 Technical Details
@@ -562,11 +416,6 @@ pip install datasets
 export PYTHONOPTIMIZE=1
 python run_preprocessing.py --chunk-size 1000
 ```
-
-#### 3. MCP Connection Issues
-```bash
-# Check MCP server configuration
-python laptop_recommender_mcp.py --debug
 
 # Verify port availability
 netstat -an | grep 8000

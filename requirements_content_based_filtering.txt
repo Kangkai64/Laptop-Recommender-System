@@ -1,0 +1,45 @@
+# Requirements for Content-Based Filtering Algorithm
+# Core dependencies for the laptop recommendation system
+
+# Data manipulation and analysis
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Machine learning and text processing
+scikit-learn>=1.1.0
+scipy>=1.9.0
+
+# Text processing and NLP
+nltk>=3.7
+textblob>=0.17.0
+
+# Performance monitoring (optional)
+psutil>=5.8.0
+
+# Testing and development
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Jupyter notebook support (optional)
+jupyter>=1.0.0
+ipykernel>=6.0.0
+
+# Visualization (optional)
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Progress bars (optional)
+tqdm>=4.64.0
+
+# Memory optimization (optional)
+joblib>=1.2.0
+
+# Configuration management (optional)
+pyyaml>=6.0
+
+# Logging enhancement (optional)
+colorlog>=6.7.0
+
+# Performance profiling (optional)
+memory-profiler>=0.60.0
+line-profiler>=3.5.0
