@@ -133,6 +133,66 @@
             word-wrap: break-word;
         }
         
+        /* Consistent Product Card Image Styling */
+        .laptop-card .card-img-top {
+            height: 200px !important;
+            width: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        .laptop-card .card-img-top-placeholder {
+            height: 200px !important;
+            width: 100%;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+        }
+        
+        /* Detail page main image */
+        .detail-main-image {
+            max-height: 300px !important;
+            width: 100%;
+            object-fit: contain;
+            object-position: center;
+        }
+        
+        /* Detail page similar laptops */
+        .similar-laptop-card .card-img-top {
+            height: 150px !important;
+            width: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        .similar-laptop-card .card-img-top-placeholder {
+            height: 150px !important;
+            width: 100%;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+        }
+        
+        /* Thumbnail images in detail page */
+        .thumbnail-image {
+            height: 60px !important;
+            width: 60px !important;
+            object-fit: cover;
+            object-position: center;
+            border-radius: 4px;
+        }
+        
+        /* Ensure consistent image container sizing */
+        .image-thumbnails .col-auto {
+            width: 60px;
+            height: 60px;
+            margin: 2px;
+        }
+        
         .loading {
             display: none;
             text-align: center;

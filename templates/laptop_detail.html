@@ -2,6 +2,49 @@
 
 {% block title %}{{ laptop.title_y[:50] }} - Laptop Recommender System{% endblock %}
 
+{% block extra_css %}
+<style>
+    .image-thumbnails {
+        margin-top: 15px;
+    }
+    
+    .thumbnail-image {
+        transition: all 0.3s ease;
+        border: 2px solid #dee2e6;
+    }
+    
+    .thumbnail-image:hover {
+        transform: scale(1.05);
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    }
+    
+    .thumbnail-image.active {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    }
+    
+    #mainImage {
+        transition: opacity 0.3s ease;
+    }
+    
+    .image-gallery-container {
+        position: relative;
+    }
+    
+    .image-counter {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
     <!-- Breadcrumb -->
@@ -19,10 +62,51 @@
         <div class="col-lg-6">
             <div class="card mb-4">
                 <div class="card-body text-center">
-                    <!-- Laptop Image Placeholder -->
-                    <div class="bg-light rounded p-5 mb-4">
-                        <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
-                    </div>
+                    <!-- Laptop Image Gallery -->
+                    {% if laptop.images and laptop.images|length > 0 %}
+                        {% if laptop.images is string %}
+                            <img src="{{ laptop.images }}" class="img-fluid rounded mb-4 detail-main-image" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="bg-light rounded p-5 mb-4" style="display: none;">
+                                <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
+                            </div>
+                        {% elif laptop.images is sequence and laptop.images|length > 0 %}
+                            <!-- Main Image with Counter -->
+                            <div class="image-gallery-container">
+                                <img src="{{ laptop.images[0] }}" class="img-fluid rounded mb-3 detail-main-image" alt="{{ laptop.title_y }}" id="mainImage" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="bg-light rounded p-5 mb-3" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
+                                </div>
+                                <div class="image-counter">1/{{ laptop.images|length }}</div>
+                            </div>
+                            
+                            <!-- Image Thumbnails -->
+                            {% if laptop.images|length > 1 %}
+                                <div class="image-thumbnails mb-4">
+                                    <div class="row g-2 justify-content-center">
+                                        {% for image in laptop.images %}
+                                            <div class="col-auto">
+                                                <img src="{{ image }}" 
+                                                     class="img-thumbnail thumbnail-image" 
+                                                     alt="{{ laptop.title_y }} - Image {{ loop.index }}"
+                                                     onclick="changeMainImage('{{ image }}', {{ loop.index }})"
+                                                     style="cursor: pointer; border: 2px solid #dee2e6;"
+                                                     {% if loop.first %}id="activeThumbnail" style="cursor: pointer; border: 2px solid #007bff;"{% endif %}
+                                                     onerror="this.style.display='none';">
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="bg-light rounded p-5 mb-4">
+                                <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="bg-light rounded p-5 mb-4">
+                            <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
+                        </div>
+                    {% endif %}
                     
                     <!-- Title -->
                     <h2 class="fw-bold mb-3">{{ laptop.title_y }}</h2>
@@ -114,6 +198,72 @@
         </div>
     </div>
 
+    <!-- Media Section -->
+    {% if laptop.videos and laptop.videos|length > 0 %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-video me-2 text-primary"></i>
+                        Product Videos
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for video in laptop.videos %}
+                        <div class="col-md-6 col-lg-4">
+                            <div class="video-container">
+                                {% if video.endswith('.mp4') or video.endswith('.webm') or video.endswith('.ogg') %}
+                                    <video controls class="img-fluid rounded" style="max-height: 200px;">
+                                        <source src="{{ video }}" type="video/mp4">
+                                        Your browser does not support the video tag.
+                                    </video>
+                                {% elif 'amazon.com' in video %}
+                                    <div class="bg-light rounded p-3 text-center">
+                                        <i class="fas fa-video text-muted" style="font-size: 2rem;"></i>
+                                        <p class="text-muted mt-2 mb-0">Amazon Video Review</p>
+                                        <a href="{{ video }}" target="_blank" class="btn btn-outline-primary btn-sm mt-2">
+                                            <i class="fas fa-external-link-alt me-1"></i>Watch Video
+                                        </a>
+                                    </div>
+                                {% elif 'youtube.com' in video or 'youtu.be' in video %}
+                                    <div class="ratio ratio-16x9">
+                                        <iframe src="{{ video.replace('watch?v=', 'embed/') }}" 
+                                                title="Product Video" 
+                                                frameborder="0" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                allowfullscreen></iframe>
+                                    </div>
+                                {% else %}
+                                    <div class="bg-light rounded p-3 text-center">
+                                        <i class="fas fa-video text-muted" style="font-size: 2rem;"></i>
+                                        <p class="text-muted mt-2 mb-0">Video: {{ video }}</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- No Videos Section -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-video text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">No Product Videos Available</h5>
+                    <p class="text-muted">We don't have specific videos for this laptop at the moment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Similar Laptops -->
     {% if similar_laptops %}
     <div class="row mt-5">
@@ -126,39 +276,53 @@
             <div class="row g-4">
                 {% for similar in similar_laptops %}
                 <div class="col-lg-3 col-md-6">
-                    <div class="card laptop-card h-100">
-                        <!-- Laptop Image Placeholder -->
-                        <div class="card-img-top bg-light text-center py-3" style="height: 150px;">
-                            <i class="fas fa-laptop" style="font-size: 3rem; color: #6c757d;"></i>
-                        </div>
+                    <div class="card laptop-card h-100 similar-laptop-card">
+                        <!-- Laptop Image -->
+                        {% if similar.images and similar.images|length > 0 and similar.images[0] and similar.images[0] != 'null' and similar.images[0] != '' %}
+                            <img src="{{ similar.images[0] }}" class="card-img-top" alt="{{ similar.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="card-img-top-placeholder" style="display: none;">
+                                <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                            </div>
+                        {% else %}
+                            <div class="card-img-top-placeholder">
+                                <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                            </div>
+                        {% endif %}
                         
                         <div class="card-body">
                             <!-- Title and Brand -->
-                            <h6 class="card-title">{{ similar.title_y[:40] }}{% if similar.title_y|length > 40 %}...{% endif %}</h6>
+                            {% set title = similar.title_y if similar.title_y else similar.title %}
+                            <h6 class="card-title">{{ title[:40] }}{% if title|length > 40 %}...{% endif %}</h6>
                             <p class="text-muted mb-2">
-                                <i class="fas fa-tag me-1"></i>{{ similar.brand }}
+                                <i class="fas fa-tag me-1"></i>
+                                {% if similar.brand and similar.brand != 'Unknown Brand' %}
+                                    {{ similar.brand }}
+                                {% else %}
+                                    Brand {{ similar.brand_encoded if similar.brand_encoded else 'Unknown' }}
+                                {% endif %}
                             </p>
                             
                             <!-- Rating -->
                             <div class="mb-2">
                                 <span class="rating-stars">
+                                    {% set rating = similar.average_rating if similar.average_rating else similar.rating %}
                                     {% for i in range(5) %}
-                                        {% if i < similar.average_rating|int %}
+                                        {% if i < rating|int %}
                                             <i class="fas fa-star"></i>
-                                        {% elif similar.average_rating % 1 >= 0.5 and i == similar.average_rating|int %}
+                                        {% elif rating % 1 >= 0.5 and i == rating|int %}
                                             <i class="fas fa-star-half-alt"></i>
                                         {% else %}
                                             <i class="far fa-star"></i>
                                         {% endif %}
                                     {% endfor %}
                                 </span>
-                                <span class="text-muted ms-2">({{ "%.1f"|format(similar.average_rating) }})</span>
+                                <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
                             </div>
                             
                             <!-- Price -->
                             <div class="mb-3">
                                 <span class="price-tag">
-                                    RM {{ "%.2f"|format(similar.price_myr) }}
+                                    RM {{ "%.2f"|format(similar.price_myr if similar.price_myr else 0) }}
                                 </span>
                             </div>
                             
@@ -308,6 +472,31 @@ function updateComparisonSection() {
     html += '</div>';
     
     $('#comparison-table').html(html);
+}
+
+// Image Gallery Functions
+function changeMainImage(imageSrc, imageIndex) {
+    // Update main image
+    document.getElementById('mainImage').src = imageSrc;
+    
+    // Update image counter
+    const imageCounter = document.querySelector('.image-counter');
+    if (imageCounter) {
+        const totalImages = document.querySelectorAll('.thumbnail-image').length;
+        imageCounter.textContent = `${imageIndex}/${totalImages}`;
+    }
+    
+    // Update active thumbnail styling
+    const thumbnails = document.querySelectorAll('.thumbnail-image');
+    thumbnails.forEach(thumb => {
+        thumb.style.border = '2px solid #dee2e6';
+    });
+    
+    // Find clicked thumbnail and make it active
+    const clickedThumbnail = Array.from(thumbnails).find(thumb => thumb.src === imageSrc);
+    if (clickedThumbnail) {
+        clickedThumbnail.style.border = '2px solid #007bff';
+    }
 }
 
 $(document).ready(function() {

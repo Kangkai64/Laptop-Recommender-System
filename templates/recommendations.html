@@ -51,49 +51,96 @@
     {% if recommendations %}
         <div class="row g-4">
             {% for laptop in recommendations %}
-            <div class="col-lg-6 col-xl-4">
-                <div class="card laptop-card h-100">
-                    <div class="card-body">
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="card laptop-card h-100">
+                        <!-- Laptop Image -->
+                        {% if laptop.images and laptop.images|length > 0 %}
+                            {% if laptop.images is string and laptop.images != 'null' and laptop.images != '' %}
+                                <img src="{{ laptop.images }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% elif laptop.images is sequence and laptop.images|length > 0 and laptop.images[0] and laptop.images[0] != 'null' and laptop.images[0] != '' %}
+                                <img src="{{ laptop.images[0] }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% else %}
+                                <div class="card-img-top-placeholder">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="card-img-top-placeholder">
+                                <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="card-body">
                         <!-- Title and Brand -->
-                        <h5 class="card-title">{{ laptop.title_y[:100] }}{% if laptop.title_y|length > 100 %}...{% endif %}</h5>
+                        {% set title = laptop.title_y if laptop.title_y else laptop.title %}
+                        <h5 class="card-title">{{ title[:100] }}{% if title|length > 100 %}...{% endif %}</h5>
                         <p class="text-muted mb-2">
-                            <i class="fas fa-tag me-1"></i>{{ laptop.brand }}
+                            <i class="fas fa-tag me-1"></i>
+                            {% if laptop.brand and laptop.brand != 'Unknown Brand' %}
+                                {{ laptop.brand }}
+                            {% else %}
+                                Brand {{ laptop.brand_encoded if laptop.brand_encoded else 'Unknown' }}
+                            {% endif %}
                         </p>
                         
                         <!-- Rating -->
                         <div class="mb-2">
                             <span class="rating-stars">
+                                {% set rating = laptop.average_rating if laptop.average_rating else laptop.rating %}
                                 {% for i in range(5) %}
-                                    {% if i < laptop.average_rating|int %}
+                                    {% if i < rating|int %}
                                         <i class="fas fa-star text-warning"></i>
-                                    {% elif laptop.average_rating % 1 >= 0.5 and i == laptop.average_rating|int %}
+                                    {% elif rating % 1 >= 0.5 and i == rating|int %}
                                         <i class="fas fa-star-half-alt text-warning"></i>
                                     {% else %}
                                         <i class="far fa-star text-warning"></i>
                                     {% endif %}
                                 {% endfor %}
                             </span>
-                            <span class="text-muted ms-2">({{ "%.1f"|format(laptop.average_rating) }})</span>
+                            <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
                         </div>
                         
                         <!-- Price -->
                         <div class="mb-3">
                             <span class="price-tag">
-                                RM {{ "%.2f"|format(laptop.price_myr) }}
+                                RM {{ "%.2f"|format(laptop.price_myr if laptop.price_myr else 0) }}
                             </span>
                         </div>
                         
                         <!-- Key Features -->
                         <div class="mb-3">
                             <small class="text-muted">
-                                {% if laptop.features and laptop.features != '' %}
-                                    {% set features_text = laptop.features %}
+                                {% set features = laptop.features if laptop.features else '' %}
+                                {% if features and features != '' %}
+                                    {% set features_text = features %}
                                     {% if features_text|length > 100 %}
                                         {% set features_text = features_text[:100] + '...' %}
                                     {% endif %}
                                     <div class="features-text">{{ features_text }}</div>
                                 {% else %}
                                     <span class="text-muted">No features available</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        
+                        <!-- Media Indicators -->
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                {% if laptop.videos and laptop.videos|length > 0 %}
+                                    <span class="badge bg-success me-1">
+                                        <i class="fas fa-video me-1"></i>{{ laptop.videos|length }} Video{{ 's' if laptop.videos|length != 1 else '' }}
+                                    </span>
+                                {% endif %}
+                                {% if laptop.images and laptop.images|length > 0 %}
+                                    <span class="badge bg-info me-1">
+                                        <i class="fas fa-image me-1"></i>{{ laptop.images|length }} Image{{ 's' if laptop.images|length != 1 else '' }}
+                                    </span>
                                 {% endif %}
                             </small>
                         </div>

@@ -294,12 +294,14 @@ class ContentBasedFiltering:
                 laptop_data = self.df_laptop.iloc[original_idx]
                 recommendations.append({
                     'asin': laptop_data['asin'],
-                    'title': laptop_data['title_y_clean'],
+                    'title_y': laptop_data['title_y_clean'],  # Fix: use title_y instead of title
                     'brand': laptop_data['brand_encoded'],
                     'price_myr': laptop_data['price_myr'],
-                    'rating': laptop_data['average_rating'],
+                    'average_rating': laptop_data['average_rating'],  # Fix: use average_rating instead of rating
                     'similarity_score': similarities[original_idx],
-                    'features': laptop_data['features_clean']
+                    'features': laptop_data['features_clean'],
+                    'images_y': laptop_data.get('images_y'),  # Include media columns
+                    'videos': laptop_data.get('videos')
                 })
             
             logger.info(f"Generated {len(recommendations)} recommendations for laptop {laptop_id}")
@@ -325,18 +327,40 @@ class ContentBasedFiltering:
             self.create_feature_matrix()
         
         try:
+            # Apply budget filtering first
+            filtered_df = self.df_laptop.copy()
+            
+            # Handle budget range filtering
+            if 'budget_range' in preferences and preferences['budget_range']:
+                budget_min, budget_max = preferences['budget_range']
+                if budget_min is not None and budget_max is not None:
+                    filtered_df = filtered_df[
+                        (filtered_df['price_myr'] >= budget_min) & 
+                        (filtered_df['price_myr'] <= budget_max)
+                    ]
+                    logger.info(f"Budget filtering applied: RM {budget_min} - RM {budget_max}, {len(filtered_df)} laptops remaining")
+            
+            # If no laptops match budget, return empty list
+            if len(filtered_df) == 0:
+                logger.warning("No laptops match the specified budget range")
+                return []
+            
             # Create preference vector
             preference_vector = self._create_preference_vector(preferences)
             
-            # Calculate similarity to preference vector
-            similarities = cosine_similarity([preference_vector], self.feature_matrix)[0]
+            # Calculate similarity to preference vector for filtered dataset
+            # We need to create a feature matrix for the filtered dataset
+            filtered_indices = filtered_df.index
+            filtered_feature_matrix = self.feature_matrix[filtered_indices]
             
-            # Get top recommendations
+            similarities = cosine_similarity([preference_vector], filtered_feature_matrix)[0]
+            
+            # Get top recommendations from filtered dataset
             top_indices = np.argsort(similarities)[::-1][:n_recommendations]
             
             recommendations = []
             for idx in top_indices:
-                laptop_data = self.df_laptop.iloc[idx]
+                laptop_data = filtered_df.iloc[idx]
                 recommendations.append({
                     'asin': laptop_data['asin'],
                     'title_y': laptop_data['title_y_clean'],  # Changed from 'title' to 'title_y'
@@ -344,7 +368,9 @@ class ContentBasedFiltering:
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Changed from 'rating' to 'average_rating'
                     'similarity_score': similarities[idx],
-                    'features': laptop_data['features_clean']
+                    'features': laptop_data['features_clean'],
+                    'images_y': laptop_data.get('images_y'),  # Include media columns
+                    'videos': laptop_data.get('videos')
                 })
             
             logger.info(f"Generated {len(recommendations)} recommendations based on preferences")

@@ -78,8 +78,31 @@
         {% if results %}
             <div class="row g-4">
                 {% for laptop in results %}
-                <div class="col-lg-4 col-md-6">
+                <div class="col-lg-3 col-md-6 mb-4">
                     <div class="card laptop-card h-100">
+                        <!-- Laptop Image -->
+                        {% if laptop.images and laptop.images|length > 0 %}
+                            {% if laptop.images is string and laptop.images != 'null' and laptop.images != '' %}
+                                <img src="{{ laptop.images }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% elif laptop.images is sequence and laptop.images|length > 0 and laptop.images[0] and laptop.images[0] != 'null' and laptop.images[0] != '' %}
+                                <img src="{{ laptop.images[0] }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% else %}
+                                <div class="card-img-top-placeholder">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="card-img-top-placeholder">
+                                <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                            </div>
+                        {% endif %}
+                        
                         <div class="card-body">
                             <!-- Title and Brand -->
                             <h5 class="card-title">{{ laptop.title_y[:100] }}{% if laptop.title_y|length > 100 %}...{% endif %}</h5>

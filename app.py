@@ -61,6 +61,15 @@ def initialize_system():
                 brand_mapping = original_data[['asin', 'brand']].drop_duplicates(subset=['asin'])
                 df_laptop = df_laptop.merge(brand_mapping, on='asin', how='left')
         
+        # Add media columns back if they exist in original data
+        media_columns = ['images_y', 'videos']
+        for col in media_columns:
+            if col in original_data.columns and col not in df_laptop.columns:
+                # Map back to laptop dataframe using asin
+                media_mapping = original_data[['asin', col]].drop_duplicates(subset=['asin'])
+                df_laptop = df_laptop.merge(media_mapping, on='asin', how='left')
+                logger.info(f"Added back {col} column from original data")
+        
         # Set the data in the recommender system
         recommender_system.df_laptop = df_laptop
         recommender_system.df_rating = df_rating
@@ -74,6 +83,212 @@ def initialize_system():
     except Exception as e:
         logger.error(f"Error initializing system: {str(e)}")
         return False
+
+# Helper functions for media data
+def convert_numpy_to_python(obj):
+    """Recursively convert numpy objects to Python native types for JSON serialization."""
+    if obj is None:
+        return None
+    elif hasattr(obj, 'shape') and len(obj.shape) > 0:  # numpy array
+        return obj.tolist()
+    elif hasattr(obj, 'item'):  # numpy scalar
+        return obj.item()
+    elif hasattr(obj, 'dtype'):  # other numpy types
+        if obj.dtype.kind in 'iuf':  # integer, unsigned integer, float
+            return float(obj) if obj.dtype.kind == 'f' else int(obj)
+        else:
+            return str(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_to_python(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_to_python(item) for item in obj]
+    elif str(type(obj)).startswith("<class 'numpy"):
+        return str(obj)
+    else:
+        # Check for NaN values safely
+        try:
+            if pd.isna(obj):
+                return None
+        except (ValueError, TypeError):
+            pass
+        return obj
+
+def extract_image_urls(images_data):
+    """Extract image URLs from the complex images_y data structure."""
+    if not images_data or pd.isna(images_data):
+        return []
+    
+    try:
+        if isinstance(images_data, dict):
+            # Extract hi_res images first, then large, then thumb
+            if 'hi_res' in images_data and images_data['hi_res'] is not None:
+                if hasattr(images_data['hi_res'], 'tolist'):
+                    urls = images_data['hi_res'].tolist()
+                elif isinstance(images_data['hi_res'], (list, tuple)):
+                    urls = list(images_data['hi_res'])
+                else:
+                    urls = []
+                
+                # Filter out invalid URLs
+                valid_urls = []
+                for url in urls:
+                    if url and str(url).startswith('http') and str(url) != 'null':
+                        valid_urls.append(str(url))
+                return valid_urls
+                
+            elif 'large' in images_data and images_data['large'] is not None:
+                if hasattr(images_data['large'], 'tolist'):
+                    urls = images_data['large'].tolist()
+                elif isinstance(images_data['large'], (list, tuple)):
+                    urls = list(images_data['large'])
+                else:
+                    urls = []
+                
+                # Filter out invalid URLs
+                valid_urls = []
+                for url in urls:
+                    if url and str(url).startswith('http') and str(url) != 'null':
+                        valid_urls.append(str(url))
+                return valid_urls
+                
+            elif 'thumb' in images_data and images_data['thumb'] is not None:
+                if hasattr(images_data['thumb'], 'tolist'):
+                    urls = images_data['thumb'].tolist()
+                elif isinstance(images_data['thumb'], (list, tuple)):
+                    urls = list(images_data['thumb'])
+                else:
+                    urls = []
+                
+                # Filter out invalid URLs
+                valid_urls = []
+                for url in urls:
+                    if url and str(url).startswith('http') and str(url) != 'null':
+                        valid_urls.append(str(url))
+                return valid_urls
+                
+        elif isinstance(images_data, (list, tuple)):
+            urls = list(images_data)
+            # Filter out invalid URLs
+            valid_urls = []
+            for url in urls:
+                if url and str(url).startswith('http') and str(url) != 'null':
+                    valid_urls.append(str(url))
+            return valid_urls
+            
+        elif isinstance(images_data, str):
+            if images_data.startswith('http') and images_data != 'null':
+                return [images_data]
+    except Exception as e:
+        logger.warning(f"Error extracting image URLs: {e}")
+    
+    return []
+
+def extract_video_urls(videos_data, laptop_title=None, laptop_brand=None):
+    """Extract video URLs from the complex videos data structure with relevance filtering."""
+    if not videos_data or pd.isna(videos_data):
+        return []
+    
+    try:
+        video_urls = []
+        
+        if isinstance(videos_data, dict):
+            # Extract video URLs and titles
+            if 'url' in videos_data and videos_data['url'] is not None:
+                urls = videos_data['url']
+                titles = videos_data.get('title', [])
+                
+                if hasattr(urls, 'tolist'):
+                    urls = urls.tolist()
+                elif isinstance(urls, (list, tuple)):
+                    urls = list(urls)
+                
+                if hasattr(titles, 'tolist'):
+                    titles = titles.tolist()
+                elif isinstance(titles, (list, tuple)):
+                    titles = list(titles)
+                
+                # Filter videos based on relevance
+                for i, url in enumerate(urls):
+                    title = titles[i] if i < len(titles) else ""
+                    if is_video_relevant(title, url, laptop_title, laptop_brand):
+                        video_urls.append(url)
+                        
+        elif isinstance(videos_data, (list, tuple)):
+            video_urls = list(videos_data)
+        elif isinstance(videos_data, str):
+            video_urls = [videos_data]
+            
+    except Exception as e:
+        logger.warning(f"Error extracting video URLs: {e}")
+    
+    return video_urls
+
+def is_video_relevant(video_title, video_url, laptop_title=None, laptop_brand=None):
+    """
+    Check if a video is relevant to the specific laptop.
+    
+    Args:
+        video_title: Title of the video
+        video_url: URL of the video
+        laptop_title: Title of the laptop
+        laptop_brand: Brand of the laptop
+        
+    Returns:
+        bool: True if video is relevant to the laptop
+    """
+    if not video_title or not laptop_title:
+        return False
+    
+    # Convert to lowercase for comparison
+    video_title_lower = str(video_title).lower()
+    laptop_title_lower = str(laptop_title).lower()
+    laptop_brand_lower = str(laptop_brand).lower() if laptop_brand else ""
+    
+    # Check if video title contains laptop brand or model keywords
+    brand_keywords = []
+    if laptop_brand_lower:
+        brand_keywords.extend([laptop_brand_lower, laptop_brand_lower.replace(" ", "")])
+    
+    # Extract model keywords from laptop title
+    model_keywords = []
+    if laptop_title_lower:
+        # Common laptop model patterns
+        words = laptop_title_lower.split()
+        for word in words:
+            if len(word) >= 3 and any(c.isdigit() for c in word):
+                model_keywords.append(word)
+    
+    # Check for relevance
+    relevant_keywords = brand_keywords + model_keywords
+    
+    for keyword in relevant_keywords:
+        if keyword and keyword in video_title_lower:
+            return True
+    
+    # If no specific match found, the video is likely generic
+    return False
+
+def extract_video_titles(videos_data):
+    """Extract video titles from the complex videos data structure."""
+    if not videos_data or pd.isna(videos_data):
+        return []
+    
+    try:
+        if isinstance(videos_data, dict):
+            # Extract video titles
+            if 'title' in videos_data and videos_data['title'] is not None:
+                if hasattr(videos_data['title'], 'tolist'):
+                    return videos_data['title'].tolist()
+                elif isinstance(videos_data['title'], (list, tuple)):
+                    return list(videos_data['title'])
+        elif isinstance(videos_data, (list, tuple)):
+            return list(videos_data)
+        elif isinstance(videos_data, str):
+            return [videos_data]
+    except Exception as e:
+        logger.warning(f"Error extracting video titles: {e}")
+    
+    return []
 
 @app.route('/')
 def index():
@@ -176,12 +391,42 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
     
     # Try different recommendation methods
     try:
-        # First try content-based recommendations
-        recommendations = recommender_system.get_content_based_recommendations(
-            preferences=query,
-            n_recommendations=10
-        )
-        return recommendations
+            # First try content-based recommendations
+            recommendations = recommender_system.get_content_based_recommendations(
+                preferences=query,
+                n_recommendations=10
+            )
+            
+            # Process image data for recommendations
+            for rec in recommendations:
+                # Convert numpy objects to Python native types
+                rec = convert_numpy_to_python(rec)
+                
+                # Extract and process image URLs
+                rec['images'] = extract_image_urls(rec.get('images_y'))
+                rec['videos'] = extract_video_urls(rec.get('videos'), rec.get('title_y'), rec.get('brand'))
+                
+                # Ensure title is available
+                if 'title_y' not in rec and 'title' in rec:
+                    rec['title_y'] = rec['title']
+                
+                # Ensure brand is available
+                if 'brand' not in rec and 'brand_encoded' in rec:
+                    rec['brand'] = f"Brand_{rec['brand_encoded']}"
+                elif 'brand' not in rec:
+                    rec['brand'] = 'Unknown Brand'
+                
+                # Ensure price is available
+                if 'price_myr' not in rec:
+                    rec['price_myr'] = 0.0
+                
+                # Ensure rating is available
+                if 'average_rating' not in rec and 'rating' in rec:
+                    rec['average_rating'] = rec['rating']
+                elif 'average_rating' not in rec:
+                    rec['average_rating'] = 0.0
+            
+            return recommendations
     except Exception as e:
         try:
             # Fallback to use case recommendations
@@ -206,7 +451,18 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
     
     # Filter by budget
     budget_max = preferences.get('budget_max', 10000)
-    filtered_df = df_laptop[df_laptop['price_myr'] <= budget_max]
+    budget_min = preferences.get('budget_min', 0)
+    
+    # Apply budget filtering
+    filtered_df = df_laptop[
+        (df_laptop['price_myr'] >= budget_min) & 
+        (df_laptop['price_myr'] <= budget_max)
+    ]
+    
+    # If no results with budget filter, try without budget constraint
+    if len(filtered_df) == 0:
+        logger.warning(f"No laptops found in budget range RM {budget_min} - RM {budget_max}, showing all laptops")
+        filtered_df = df_laptop
     
     # Get sample laptops
     sample_laptops = filtered_df.sample(min(10, len(filtered_df)))
@@ -215,14 +471,30 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
     results = []
     for _, laptop in sample_laptops.iterrows():
         laptop_dict = laptop.to_dict()
+        # Convert numpy objects to Python native types
+        laptop_dict = convert_numpy_to_python(laptop_dict)
         
         # Map column names to what templates expect
-        laptop_dict['title_y'] = laptop_dict.get('title_y_clean', 'Unknown Title')
-        laptop_dict['features'] = laptop_dict.get('features_clean', '')
+        laptop_dict['title_y'] = laptop_dict.get('title_y_clean', laptop_dict.get('title_y', 'Unknown Title'))
+        laptop_dict['features'] = laptop_dict.get('features_clean', laptop_dict.get('features', ''))
+        
+        # Extract media content
+        laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))
+        laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))
+        
+        # Ensure images is a list
+        if not isinstance(laptop_dict['images'], list):
+            laptop_dict['images'] = []
         
         # Ensure brand is available
         if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:
             laptop_dict['brand'] = f"Brand_{laptop_dict['brand_encoded']}"
+        elif 'brand' not in laptop_dict:
+            laptop_dict['brand'] = 'Unknown Brand'
+        
+        # Ensure price is available
+        if 'price_myr' not in laptop_dict:
+            laptop_dict['price_myr'] = 0.0
         
         # Add recommendation score
         laptop_dict['recommendation_score'] = 0.8  # Default score
@@ -260,6 +532,8 @@ def explore():
         # Map column names to what templates expect
         laptop_dict['title_y'] = laptop_dict.get('title_y_clean', 'Unknown Title')
         laptop_dict['features'] = laptop_dict.get('features_clean', '')
+        laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))  # Include images
+        laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))  # Include videos
         
         # Ensure brand is available
         if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:
@@ -288,6 +562,8 @@ def laptop_detail(laptop_id):
     laptop['title_y'] = laptop.get('title_y_clean', laptop.get('title_y', 'Unknown Title'))
     laptop['features'] = laptop.get('features_clean', laptop.get('features', ''))
     laptop['average_rating'] = laptop.get('average_rating', 0.0)  # Ensure average_rating exists
+    laptop['images'] = extract_image_urls(laptop.get('images_y'))  # Include images
+    laptop['videos'] = extract_video_urls(laptop.get('videos'), laptop.get('title_y'), laptop.get('brand'))  # Include videos
     
     # Ensure brand is available
     if 'brand' not in laptop and 'brand_encoded' in laptop:
@@ -312,6 +588,8 @@ def laptop_detail(laptop_id):
             similar['title_y'] = similar.get('title_y_clean', similar.get('title_y', 'Unknown Title'))
             similar['features'] = similar.get('features_clean', similar.get('features', ''))
             similar['average_rating'] = similar.get('average_rating', 0.0)
+            similar['images'] = extract_image_urls(similar.get('images_y'))  # Include images
+            similar['videos'] = extract_video_urls(similar.get('videos'), similar.get('title_y'), similar.get('brand'))  # Include videos
             if 'brand' not in similar and 'brand_encoded' in similar:
                 similar['brand'] = f"Brand_{similar['brand_encoded']}"
             elif 'brand' not in similar:
@@ -367,6 +645,8 @@ def search():
         laptop_dict['title_y'] = laptop_dict.get('title_y_clean', laptop_dict.get('title_y', 'Unknown Title'))
         laptop_dict['features'] = laptop_dict.get('features_clean', laptop_dict.get('features', ''))
         laptop_dict['average_rating'] = laptop_dict.get('average_rating', 0.0)
+        laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))  # Include images
+        laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))  # Include videos
         
         # Ensure brand is available
         if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:
@@ -452,21 +732,33 @@ def api_load_more_laptops():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         
+        # Debug logging
+        logger.info(f"Load more laptops request: page={page}, per_page={per_page}")
+        logger.info(f"Total laptops in dataset: {len(df_laptop)}")
+        
         # Calculate offset
         offset = (page - 1) * per_page
+        logger.info(f"Calculated offset: {offset}")
         
         # Get laptops for the current page
         laptops_page = df_laptop.iloc[offset:offset + per_page]
+        logger.info(f"Retrieved {len(laptops_page)} laptops for page {page}")
         
         # Format laptops for response
         laptops = []
-        for _, laptop in laptops_page.iterrows():
-            laptop_dict = laptop.to_dict()
+        for idx, laptop in laptops_page.iterrows():
+            try:
+                laptop_dict = laptop.to_dict()
+            except Exception as e:
+                logger.warning(f"Error converting laptop {idx} to dict: {e}")
+                continue
             
             # Map column names to what templates expect
             laptop_dict['title_y'] = laptop_dict.get('title_y_clean', laptop_dict.get('title_y', 'Unknown Title'))
             laptop_dict['features'] = laptop_dict.get('features_clean', laptop_dict.get('features', ''))
             laptop_dict['average_rating'] = laptop_dict.get('average_rating', 0.0)
+            laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))  # Include images
+            laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))  # Include videos
             
             # Ensure brand is available
             if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:
@@ -478,37 +770,41 @@ def api_load_more_laptops():
             if 'price_myr' not in laptop_dict:
                 laptop_dict['price_myr'] = 0.0
             
-            # Convert numpy types to standard Python types and handle NaN values
-            for key, value in laptop_dict.items():
-                # Handle NaN values
-                if pd.isna(value):
-                    laptop_dict[key] = None
-                # Handle numpy types
-                elif hasattr(value, 'item'):
-                    laptop_dict[key] = value.item()
-                # Handle numpy arrays
-                elif hasattr(value, 'tolist'):
-                    laptop_dict[key] = value.tolist()
-                # Handle other numpy types
-                elif hasattr(value, 'dtype'):
-                    if value.dtype.kind in 'iuf':  # integer, unsigned integer, float
-                        laptop_dict[key] = float(value) if value.dtype.kind == 'f' else int(value)
-                    else:
-                        laptop_dict[key] = str(value)
+            # Convert all numpy objects to Python native types
+            laptop_dict = convert_numpy_to_python(laptop_dict)
             
             laptops.append(laptop_dict)
         
         # Check if there are more laptops
         has_more = offset + per_page < len(df_laptop)
         
-        return jsonify({
+        # Final JSON serialization check
+        response_data = {
             'laptops': laptops,
             'has_more': has_more,
             'current_page': page,
             'total_laptops': len(df_laptop)
-        })
+        }
+        
+        # Test JSON serialization before returning
+        try:
+            json.dumps(response_data)
+        except TypeError as e:
+            logger.error(f"JSON serialization error: {e}")
+            # Try to fix any remaining non-serializable objects
+            for i, laptop in enumerate(laptops):
+                for key, value in laptop.items():
+                    if not isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                        logger.warning(f"Non-serializable object found in laptop {i}, key '{key}': {type(value)} - {value}")
+                        laptop[key] = str(value)
+        
+        return jsonify(response_data)
         
     except Exception as e:
+        logger.error(f"Error in load-more-laptops API: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)

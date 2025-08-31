@@ -97,7 +97,7 @@ class LaptopDataPreprocessor:
         laptop_columns = [
             'asin', 'parent_asin', 'title_y', 'brand', 'os', 'color', 'store',
             'average_rating', 'rating_number', 'features', 'price',
-            'images_y'
+            'images_y', 'videos'  # Include both images and videos
         ]
         
         rating_columns = [
@@ -108,6 +108,13 @@ class LaptopDataPreprocessor:
         # Filter to only include columns that exist in the dataset
         available_laptop_cols = [col for col in laptop_columns if col in df.columns]
         available_rating_cols = [col for col in rating_columns if col in df.columns]
+        
+        # Log which media columns are available
+        media_cols = [col for col in ['images_y', 'videos'] if col in df.columns]
+        if media_cols:
+            logger.info(f"Media columns found: {media_cols}")
+        else:
+            logger.warning("No media columns (images_y, videos) found in dataset")
         
         # Create separate dataframes
         df_laptop = df[available_laptop_cols].drop_duplicates(subset=['asin']).reset_index(drop=True)
@@ -209,10 +216,20 @@ class LaptopDataPreprocessor:
             'storage_display'
         ])]
         
-        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns + specification_columns
+        # Add media columns (images and videos)
+        media_columns = [col for col in df_normalized.columns if col in ['images_y', 'videos']]
+        
+        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns + specification_columns + media_columns
         available_final_columns = [col for col in final_columns if col in df_normalized.columns]
         
         df_final = df_normalized[available_final_columns]
+        
+        # Log which media columns were preserved
+        preserved_media = [col for col in media_columns if col in df_final.columns]
+        if preserved_media:
+            logger.info(f"Media columns preserved: {preserved_media}")
+        else:
+            logger.warning("No media columns preserved in final dataframe")
         
         logger.info("Laptop data normalization completed")
         return df_final
@@ -333,8 +350,17 @@ class LaptopDataPreprocessor:
         
         # 6. Process features and details columns
         if 'features' in df_clean.columns:
-            # Skip features processing for now to avoid numpy array issues
-            df_clean['features_clean'] = df_clean['features'].astype(str)
+            # Handle features carefully to preserve structure
+            if df_clean['features'].dtype == 'object':
+                # Check if it's already a string or needs conversion
+                sample_feature = df_clean['features'].iloc[0] if len(df_clean) > 0 else None
+                if hasattr(sample_feature, '__iter__') and not isinstance(sample_feature, str):
+                    # Convert numpy arrays to clean strings
+                    df_clean['features_clean'] = df_clean['features'].apply(self._process_features)
+                else:
+                    df_clean['features_clean'] = df_clean['features'].astype(str)
+            else:
+                df_clean['features_clean'] = df_clean['features'].astype(str)
         
         if 'details' in df_clean.columns:
             df_clean['details_parsed'] = df_clean['details'].apply(self._parse_details)
@@ -343,14 +369,29 @@ class LaptopDataPreprocessor:
         initial_rows = len(df_clean)
         
         # Convert numpy arrays to strings to make them hashable for drop_duplicates
+        # BUT preserve media columns (images_y, videos) to maintain their structure
+        media_columns = ['images_y', 'videos']
         for col in df_clean.columns:
+            if col in media_columns:
+                # Skip media columns - preserve their structure
+                continue
             if df_clean[col].dtype == 'object':
                 # Check if column contains numpy arrays
                 sample_val = df_clean[col].iloc[0] if len(df_clean) > 0 else None
                 if hasattr(sample_val, '__iter__') and not isinstance(sample_val, str):
                     df_clean[col] = df_clean[col].astype(str)
         
-        df_clean = df_clean.drop_duplicates()
+        # Handle duplicates differently for media columns
+        # First, create a copy without media columns for duplicate detection
+        df_for_duplicates = df_clean.drop(columns=media_columns, errors='ignore')
+        df_for_duplicates = df_for_duplicates.drop_duplicates()
+        
+        # Then merge back the media columns
+        if media_columns:
+            media_data = df_clean[['asin'] + media_columns].drop_duplicates(subset=['asin'])
+            df_clean = df_for_duplicates.merge(media_data, on='asin', how='left')
+        else:
+            df_clean = df_for_duplicates
         final_rows = len(df_clean)
         logger.info(f"Removed {initial_rows - final_rows} duplicate rows")
         
@@ -424,7 +465,9 @@ class LaptopDataPreprocessor:
                 'price': '$1,299.99',
                 'average_rating': 4.5,
                 'rating_number': 1250,
-                'features': 'Intel Core i7, 16GB RAM, 512GB SSD, 13.4-inch FHD+ Display'
+                'features': 'Intel Core i7, 16GB RAM, 512GB SSD, 13.4-inch FHD+ Display',
+                'images_y': ['https://example.com/dell-xps-13-1.jpg', 'https://example.com/dell-xps-13-2.jpg'],
+                'videos': ['https://example.com/dell-xps-13-demo.mp4']
             },
             {
                 'asin': 'B08N5WRWNW',
@@ -433,7 +476,9 @@ class LaptopDataPreprocessor:
                 'price': '$1,299.00',
                 'average_rating': 4.8,
                 'rating_number': 2100,
-                'features': 'Apple M1 Chip, 8GB RAM, 256GB SSD, 13-inch Retina Display'
+                'features': 'Apple M1 Chip, 8GB RAM, 256GB SSD, 13-inch Retina Display',
+                'images_y': ['https://example.com/macbook-pro-1.jpg', 'https://example.com/macbook-pro-2.jpg'],
+                'videos': ['https://example.com/macbook-pro-review.mp4']
             },
             {
                 'asin': 'B08N5WRWNW',
@@ -442,7 +487,9 @@ class LaptopDataPreprocessor:
                 'price': '$1,399.99',
                 'average_rating': 4.3,
                 'rating_number': 890,
-                'features': 'Intel Core i7, 16GB RAM, 512GB SSD, 13.3-inch 4K OLED Display'
+                'features': 'Intel Core i7, 16GB RAM, 512GB SSD, 13.3-inch 4K OLED Display',
+                'images_y': ['https://example.com/hp-spectre-1.jpg', 'https://example.com/hp-spectre-2.jpg'],
+                'videos': ['https://example.com/hp-spectre-unboxing.mp4']
             },
             {
                 'asin': 'B08N5WRWNW',
@@ -451,7 +498,9 @@ class LaptopDataPreprocessor:
                 'price': '$1,599.99',
                 'average_rating': 4.6,
                 'rating_number': 1560,
-                'features': 'Intel Core i7, 16GB RAM, 1TB SSD, 14-inch FHD Display'
+                'features': 'Intel Core i7, 16GB RAM, 1TB SSD, 14-inch FHD Display',
+                'images_y': ['https://example.com/thinkpad-x1-1.jpg', 'https://example.com/thinkpad-x1-2.jpg'],
+                'videos': ['https://example.com/thinkpad-x1-review.mp4']
             },
             {
                 'asin': 'B08N5WRWNW',
@@ -460,7 +509,9 @@ class LaptopDataPreprocessor:
                 'price': '$1,449.99',
                 'average_rating': 4.4,
                 'rating_number': 1120,
-                'features': 'AMD Ryzen 9, 16GB RAM, 1TB SSD, 14-inch QHD Display, RTX 3060'
+                'features': 'AMD Ryzen 9, 16GB RAM, 1TB SSD, 14-inch QHD Display, RTX 3060',
+                'images_y': ['https://example.com/asus-rog-1.jpg', 'https://example.com/asus-rog-2.jpg'],
+                'videos': ['https://example.com/asus-rog-gaming.mp4']
             }
         ]
         
@@ -479,6 +530,8 @@ class LaptopDataPreprocessor:
                     'average_rating': laptop['average_rating'],
                     'rating_number': laptop['rating_number'],
                     'features': laptop['features'],
+                    'images_y': laptop['images_y'],
+                    'videos': laptop['videos'],
                     'rating': random.uniform(3.5, 5.0),
                     'user_id': f'user_{random.randint(1000, 9999)}',
                     'timestamp': f'2023-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}',

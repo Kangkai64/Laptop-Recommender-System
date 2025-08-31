@@ -109,6 +109,29 @@
         {% for laptop in laptops %}
         <div class="col-lg-3 col-md-6 mb-4">
             <div class="card laptop-card h-100">
+                <!-- Laptop Image -->
+                {% if laptop.images and laptop.images|length > 0 %}
+                    {% if laptop.images is string and laptop.images != 'null' and laptop.images != '' %}
+                        <img src="{{ laptop.images }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="card-img-top-placeholder" style="display: none;">
+                            <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                        </div>
+                    {% elif laptop.images is sequence and laptop.images|length > 0 and laptop.images[0] and laptop.images[0] != 'null' and laptop.images[0] != '' %}
+                        <img src="{{ laptop.images[0] }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="card-img-top-placeholder" style="display: none;">
+                            <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                        </div>
+                    {% else %}
+                        <div class="card-img-top-placeholder">
+                            <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="card-img-top-placeholder">
+                        <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                    </div>
+                {% endif %}
+                
                 <div class="card-body">
                     <!-- Title and Brand -->
                     <h5 class="card-title">{{ (laptop.title_y or 'Unknown Title') }}</h5>
@@ -150,6 +173,22 @@
                                 <div class="features-text">{{ features_text }}</div>
                             {% else %}
                                 <span class="text-muted">No features available</span>
+                            {% endif %}
+                        </small>
+                    </div>
+                    
+                    <!-- Media Indicators -->
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            {% if laptop.videos and laptop.videos|length > 0 %}
+                                <span class="badge bg-success me-1">
+                                    <i class="fas fa-video me-1"></i>{{ laptop.videos|length }} Video{{ 's' if laptop.videos|length != 1 else '' }}
+                                </span>
+                            {% endif %}
+                            {% if laptop.images and laptop.images|length > 0 %}
+                                <span class="badge bg-info me-1">
+                                    <i class="fas fa-image me-1"></i>{{ laptop.images|length }} Image{{ 's' if laptop.images|length != 1 else '' }}
+                                </span>
                             {% endif %}
                         </small>
                     </div>
@@ -275,7 +314,19 @@ function loadMoreLaptops() {
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error loading laptops. Please try again. Error: ' + error.message);
+            let errorMessage = 'Error loading laptops. Please try again.';
+            if (error.response) {
+                // Server responded with error status
+                try {
+                    const errorData = error.response.json();
+                    errorMessage += ' Server error: ' + (errorData.error || error.response.statusText);
+                } catch (e) {
+                    errorMessage += ' Server error: ' + error.response.statusText;
+                }
+            } else if (error.message) {
+                errorMessage += ' Error: ' + error.message;
+            }
+            alert(errorMessage);
             currentPage--; // Revert page number on error
         })
         .finally(() => {
@@ -307,6 +358,17 @@ function createLaptopCard(laptop) {
     // Safely handle price
     const price = parseFloat(laptop.price_myr) || 0;
     
+    // Safely handle images
+    let imageHtml = '<div class="card-img-top-placeholder"><i class="fas fa-laptop" style="font-size: 3rem;"></i></div>';
+    if (laptop.images && Array.isArray(laptop.images) && laptop.images.length > 0) {
+        const imageUrl = laptop.images[0];
+        if (imageUrl && imageUrl !== 'null' && imageUrl !== '' && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+            imageHtml = `<img src="${imageUrl}" class="card-img-top" alt="${title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="card-img-top-placeholder" style="display: none;"><i class="fas fa-laptop" style="font-size: 3rem;"></i></div>`;
+        }
+    } else if (laptop.images && typeof laptop.images === 'string' && laptop.images.startsWith('http')) {
+        imageHtml = `<img src="${laptop.images}" class="card-img-top" alt="${title}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="card-img-top-placeholder" style="display: none;"><i class="fas fa-laptop" style="font-size: 3rem;"></i></div>`;
+    }
+    
     // Escape special characters for JavaScript
     const escapedTitle = title.replace(/'/g, "\\'").replace(/"/g, '\\"');
     const escapedBrand = brand.replace(/'/g, "\\'").replace(/"/g, '\\"');
@@ -314,6 +376,7 @@ function createLaptopCard(laptop) {
     return `
         <div class="col-lg-3 col-md-6 mb-4">
             <div class="card laptop-card h-100">
+                ${imageHtml}
                 <div class="card-body">
                     <h6 class="card-title">${title}</h6>
                     <p class="text-muted mb-2">
@@ -334,6 +397,18 @@ function createLaptopCard(laptop) {
                     <small class="text-muted">
                         <div class="features-text">${featuresText}</div>
                     </small>
+                    
+                    <!-- Media Indicators -->
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            ${laptop.videos && laptop.videos.length > 0 ? 
+                                `<span class="badge bg-success me-1"><i class="fas fa-video me-1"></i>${laptop.videos.length} Video${laptop.videos.length !== 1 ? 's' : ''}</span>` : ''
+                            }
+                            ${laptop.images && laptop.images.length > 0 ? 
+                                `<span class="badge bg-info me-1"><i class="fas fa-image me-1"></i>${laptop.images.length} Image${laptop.images.length !== 1 ? 's' : ''}</span>` : ''
+                            }
+                        </small>
+                    </div>
                 </div>
                 
                 <div class="card-footer bg-transparent">
