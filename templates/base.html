@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Laptop Recommender System{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: var(--primary-color) !important;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 80px 0;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: 500;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            color: var(--secondary-color);
+            margin-bottom: 20px;
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .laptop-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .laptop-card .card-body {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .laptop-card .card-footer {
+            margin-top: auto;
+        }
+        
+        .rating-stars {
+            color: var(--warning-color);
+        }
+        
+        .price-tag {
+            background-color: var(--success-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .footer {
+            background-color: var(--dark-bg);
+            color: white;
+            padding: 40px 0;
+            margin-top: 60px;
+        }
+        
+        .footer .text-muted {
+            color: #b8c2cc !important;  /* Lighter color for better contrast */
+        }
+        
+        .footer a {
+            color: #b8c2cc !important;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            color: white !important;
+            text-decoration: underline;
+        }
+        
+        .features-text {
+            line-height: 1.4;
+            color: #6c757d;
+            font-size: 0.875rem;
+            word-wrap: break-word;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner-border {
+            color: var(--secondary-color);
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-laptop me-2"></i>
+                Laptop Recommender
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home me-1"></i>Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('recommend') }}">
+                            <i class="fas fa-search me-1"></i>Get Recommendations
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('explore') }}">
+                            <i class="fas fa-compass me-1"></i>Explore
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('search') }}">
+                            <i class="fas fa-search me-1"></i>Search
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('analytics') }}">
+                            <i class="fas fa-chart-bar me-1"></i>Analytics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link btn btn-link" onclick="openCompareModal()" style="border: none; background: none;">
+                            <i class="fas fa-balance-scale me-1"></i>Compare
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-laptop me-2"></i>Laptop Recommender System</h5>
+                    <p class="text-muted">Powered by SAUE (System Active, User Engage) approach</p>
+                    <p class="text-muted">Providing intelligent laptop recommendations based on your preferences.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h6>Quick Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="{{ url_for('index') }}" class="text-muted">Home</a></li>
+                        <li><a href="{{ url_for('recommend') }}" class="text-muted">Get Recommendations</a></li>
+                        <li><a href="{{ url_for('explore') }}" class="text-muted">Explore Laptops</a></li>
+                        <li><a href="{{ url_for('analytics') }}" class="text-muted">Analytics</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="text-center">
+                <p class="text-muted mb-0">&copy; 2024 Laptop Recommender System. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Comparison Modal -->
+    <div class="modal fade" id="compareModal" tabindex="-1" aria-labelledby="compareModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="compareModalLabel">
+                        <i class="fas fa-balance-scale me-2"></i>Compare Laptops
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="compareContainer">
+                        <p class="text-muted text-center">No laptops selected for comparison. Click "Compare" on laptop cards to add them.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="clearComparison()">Clear All</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        // Global functions
+        function showLoading() {
+            $('.loading').show();
+        }
+        
+        function hideLoading() {
+            $('.loading').hide();
+        }
+        
+        function formatPrice(price) {
+            return 'RM ' + parseFloat(price).toLocaleString('en-MY', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+        
+        function formatRating(rating) {
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 >= 0.5;
+            let stars = '';
+            
+            for (let i = 0; i < fullStars; i++) {
+                stars += '<i class="fas fa-star text-warning"></i>';
+            }
+            
+            if (hasHalfStar) {
+                stars += '<i class="fas fa-star-half-alt text-warning"></i>';
+            }
+            
+            const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+            for (let i = 0; i < emptyStars; i++) {
+                stars += '<i class="far fa-star text-warning"></i>';
+            }
+            
+            return stars + ' <span class="ms-2">(' + rating.toFixed(1) + ')</span>';
+        }
+        
+        // Global variables for comparison
+        let compareList = [];
+        
+        // Comparison functions
+        function openCompareModal() {
+            $('#compareModal').modal('show');
+        }
+        
+        function addToCompare(laptopId, title, brand, price, rating) {
+            const laptop = {
+                id: laptopId,
+                title: title || 'Unknown Title',
+                brand: brand || 'Unknown Brand',
+                price: price || '0.00',
+                rating: rating || '0.0'
+            };
+            
+            if (!compareList.find(item => item.id === laptopId)) {
+                compareList.push(laptop);
+                updateCompareModal();
+                showNotification('Laptop added to comparison!', 'success');
+            } else {
+                showNotification('Laptop already in comparison!', 'info');
+            }
+        }
+        
+        function removeFromCompare(laptopId) {
+            compareList = compareList.filter(item => item.id !== laptopId);
+            updateCompareModal();
+            showNotification('Laptop removed from comparison!', 'info');
+        }
+        
+        function clearComparison() {
+            compareList = [];
+            updateCompareModal();
+            showNotification('Comparison cleared!', 'info');
+        }
+        
+        function updateCompareModal() {
+            const container = $('#compareContainer');
+            
+            if (compareList.length === 0) {
+                container.html('<p class="text-muted text-center">No laptops selected for comparison. Click "Compare" on laptop cards to add them.</p>');
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-bordered">';
+            html += '<thead><tr><th>Feature</th>';
+            
+            compareList.forEach(laptop => {
+                html += `<th>${laptop.title}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            // Brand
+            html += '<tr><td><strong>Brand</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.brand}</td>`;
+            });
+            html += '</tr>';
+            
+            // Price
+            html += '<tr><td><strong>Price</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.price}</td>`;
+            });
+            html += '</tr>';
+            
+            // Rating
+            html += '<tr><td><strong>Rating</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.rating}</td>`;
+            });
+            html += '</tr>';
+            
+            html += '</tbody></table></div>';
+            
+            // Add remove buttons
+            html += '<div class="text-center mt-3">';
+            compareList.forEach(laptop => {
+                html += `<button class="btn btn-outline-danger btn-sm me-2" onclick="removeFromCompare('${laptop.id}')">
+                    <i class="fas fa-times me-1"></i>Remove ${laptop.brand}
+                </button>`;
+            });
+            html += '</div>';
+            
+            container.html(html);
+        }
+        
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' : type === 'error' ? 'alert-danger' : 'alert-info';
+            const alert = $(`<div class="alert ${alertClass} alert-dismissible fade show position-fixed" style="top: 20px; right: 20px; z-index: 9999;">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`);
+            
+            $('body').append(alert);
+            
+            setTimeout(() => {
+                alert.fadeOut(() => alert.remove());
+            }, 3000);
+        }
+        
+        // Auto-hide alerts after 5 seconds
+        $(document).ready(function() {
+            setTimeout(function() {
+                $('.alert').fadeOut('slow');
+            }, 5000);
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

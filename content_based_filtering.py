@@ -339,10 +339,10 @@ class ContentBasedFiltering:
                 laptop_data = self.df_laptop.iloc[idx]
                 recommendations.append({
                     'asin': laptop_data['asin'],
-                    'title': laptop_data['title_y_clean'],
+                    'title_y': laptop_data['title_y_clean'],  # Changed from 'title' to 'title_y'
                     'brand': laptop_data['brand_encoded'],
                     'price_myr': laptop_data['price_myr'],
-                    'rating': laptop_data['average_rating'],
+                    'average_rating': laptop_data['average_rating'],  # Changed from 'rating' to 'average_rating'
                     'similarity_score': similarities[idx],
                     'features': laptop_data['features_clean']
                 })

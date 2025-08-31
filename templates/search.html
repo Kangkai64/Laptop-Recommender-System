@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Search Laptops - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <h1 class="fw-bold mb-3">Search Laptops</h1>
+        <p class="lead text-muted">
+            Find the perfect laptop by searching through our comprehensive database
+        </p>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('search') }}">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="q" class="form-label">Search Query</label>
+                        <input type="text" class="form-control" id="q" name="q" 
+                               value="{{ query }}" placeholder="Search by brand, model, or features...">
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="brand" class="form-label">Brand</label>
+                        <select class="form-select" id="brand" name="brand">
+                            <option value="">All Brands</option>
+                            <option value="Apple" {% if request.args.get('brand') == 'Apple' %}selected{% endif %}>Apple</option>
+                            <option value="Dell" {% if request.args.get('brand') == 'Dell' %}selected{% endif %}>Dell</option>
+                            <option value="HP" {% if request.args.get('brand') == 'HP' %}selected{% endif %}>HP</option>
+                            <option value="Lenovo" {% if request.args.get('brand') == 'Lenovo' %}selected{% endif %}>Lenovo</option>
+                            <option value="ASUS" {% if request.args.get('brand') == 'ASUS' %}selected{% endif %}>ASUS</option>
+                            <option value="Acer" {% if request.args.get('brand') == 'Acer' %}selected{% endif %}>Acer</option>
+                            <option value="MSI" {% if request.args.get('brand') == 'MSI' %}selected{% endif %}>MSI</option>
+                            <option value="Razer" {% if request.args.get('brand') == 'Razer' %}selected{% endif %}>Razer</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label for="price_min" class="form-label">Price Range (MYR)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="price_min" name="price_min" 
+                                   value="{{ request.args.get('price_min', '') }}" placeholder="Min">
+                            <span class="input-group-text">-</span>
+                            <input type="number" class="form-control" id="price_max" name="price_max" 
+                                   value="{{ request.args.get('price_max', '') }}" placeholder="Max">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Search
+                    </button>
+                    <a href="{{ url_for('search') }}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-times me-2"></i>Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Search Results -->
+    {% if query or request.args.get('brand') or request.args.get('price_min') or request.args.get('price_max') %}
+        <div class="mb-4">
+            <h5>
+                <i class="fas fa-search me-2 text-primary"></i>
+                Search Results
+            </h5>
+            <p class="text-muted">
+                Found {{ total_results }} laptop{{ 's' if total_results != 1 else '' }} 
+                {% if query %}matching "{{ query }}"{% endif %}
+            </p>
+        </div>
+
+        {% if results %}
+            <div class="row g-4">
+                {% for laptop in results %}
+                <div class="col-lg-4 col-md-6">
+                    <div class="card laptop-card h-100">
+                        <div class="card-body">
+                            <!-- Title and Brand -->
+                            <h5 class="card-title">{{ laptop.title_y[:100] }}{% if laptop.title_y|length > 100 %}...{% endif %}</h5>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-tag me-1"></i>{{ laptop.brand }}
+                            </p>
+                            
+                            <!-- Rating -->
+                            <div class="mb-2">
+                                <span class="rating-stars">
+                                    {% for i in range(5) %}
+                                        {% if i < laptop.average_rating|int %}
+                                            <i class="fas fa-star text-warning"></i>
+                                        {% elif laptop.average_rating % 1 >= 0.5 and i == laptop.average_rating|int %}
+                                            <i class="fas fa-star-half-alt text-warning"></i>
+                                        {% else %}
+                                            <i class="far fa-star text-warning"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                                <span class="text-muted ms-2">({{ "%.1f"|format(laptop.average_rating) }})</span>
+                            </div>
+                            
+                            <!-- Price -->
+                            <div class="mb-3">
+                                <span class="price-tag">
+                                    RM {{ "%.2f"|format(laptop.price_myr) }}
+                                </span>
+                            </div>
+                            
+                            <!-- Key Features -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    {% if laptop.features and laptop.features != '' %}
+                                        {% set features_text = laptop.features %}
+                                        {% if features_text|length > 100 %}
+                                            {% set features_text = features_text[:100] + '...' %}
+                                        {% endif %}
+                                        <div class="features-text">{{ features_text }}</div>
+                                    {% else %}
+                                        <span class="text-muted">No features available</span>
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ url_for('laptop_detail', laptop_id=laptop.asin) }}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </a>
+                                <button class="btn btn-outline-secondary btn-sm" 
+                                        onclick="addToCompare('{{ laptop.asin }}', '{{ laptop.title_y }}', '{{ laptop.brand }}', '{{ laptop.price_myr }}', '{{ laptop.average_rating }}')">
+                                    <i class="fas fa-plus me-1"></i>Compare
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-search" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;"></i>
+                <h3>No Results Found</h3>
+                <p class="text-muted">
+                    We couldn't find any laptops matching your search criteria. 
+                    Try adjusting your search terms or filters.
+                </p>
+                <a href="{{ url_for('search') }}" class="btn btn-primary">
+                    <i class="fas fa-edit me-2"></i>Modify Search
+                </a>
+            </div>
+        {% endif %}
+    {% else %}
+        <!-- Default View -->
+        <div class="text-center py-5">
+            <i class="fas fa-search" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;"></i>
+            <h3>Start Your Search</h3>
+            <p class="text-muted">
+                Use the search form above to find laptops that match your criteria.
+            </p>
+        </div>
+    {% endif %}
+
+    <!-- Quick Actions -->
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-magic feature-icon"></i>
+                    <h5>Get Recommendations</h5>
+                    <p class="text-muted">Get personalized laptop suggestions</p>
+                    <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary">Get Started</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-compass feature-icon"></i>
+                    <h5>Explore All</h5>
+                    <p class="text-muted">Browse our complete collection</p>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-primary">Explore</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-chart-bar feature-icon"></i>
+                    <h5>View Analytics</h5>
+                    <p class="text-muted">See market insights and trends</p>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-outline-primary">Analytics</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-submit form on filter changes
+    $('#brand, #price_min, #price_max').on('change', function() {
+        if ($('#q').val() || $('#brand').val() || $('#price_min').val() || $('#price_max').val()) {
+            $('form').submit();
+        }
+    });
+});
+</script>
+{% endblock %}

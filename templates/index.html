@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">
+                    Find Your Perfect Laptop
+                </h1>
+                <p class="lead mb-4">
+                    Discover the ideal laptop that matches your needs, budget, and preferences using our intelligent SAUE-based recommendation system.
+                </p>
+                <div class="d-flex gap-3">
+                    <a href="{{ url_for('recommend') }}" class="btn btn-light btn-lg">
+                        <i class="fas fa-search me-2"></i>Get Recommendations
+                    </a>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-light btn-lg">
+                        <i class="fas fa-compass me-2"></i>Explore Laptops
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-6 text-center">
+                <i class="fas fa-laptop" style="font-size: 8rem; opacity: 0.8;"></i>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-lg-8 mx-auto">
+                <h2 class="fw-bold mb-3">Why Choose Our System?</h2>
+                <p class="lead text-muted">
+                    Powered by SAUE (System Active, User Engage) approach for intelligent and personalized recommendations
+                </p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card h-100 text-center p-4">
+                    <div class="feature-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h4>AI-Powered</h4>
+                    <p class="text-muted">
+                        Advanced machine learning algorithms analyze your preferences and provide personalized recommendations.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100 text-center p-4">
+                    <div class="feature-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h4>User-Centric</h4>
+                    <p class="text-muted">
+                        Interactive interface that adapts to your needs and provides real-time feedback and suggestions.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100 text-center p-4">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h4>Data-Driven</h4>
+                    <p class="text-muted">
+                        Based on comprehensive analysis of thousands of laptops and user reviews for accurate recommendations.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Quick Start Section -->
+<section class="py-5 bg-white">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-lg-8 mx-auto">
+                <h2 class="fw-bold mb-3">Get Started in 3 Simple Steps</h2>
+                <p class="lead text-muted">
+                    Our intuitive process makes finding your perfect laptop effortless
+                </p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="text-center">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <span class="fw-bold">1</span>
+                    </div>
+                    <h5>Tell Us Your Needs</h5>
+                    <p class="text-muted">
+                        Specify your budget, preferred brands, use case, and performance requirements.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="text-center">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <span class="fw-bold">2</span>
+                    </div>
+                    <h5>Get Smart Recommendations</h5>
+                    <p class="text-muted">
+                        Our AI analyzes thousands of options and presents the best matches for you.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="text-center">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <span class="fw-bold">3</span>
+                    </div>
+                    <h5>Compare & Choose</h5>
+                    <p class="text-muted">
+                        Compare detailed specifications, reviews, and prices to make an informed decision.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-5">
+            <a href="{{ url_for('recommend') }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-rocket me-2"></i>Start Your Search
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- System Stats Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-lg-8 mx-auto">
+                <h2 class="fw-bold mb-3">System Overview</h2>
+                <p class="lead text-muted">
+                    Our comprehensive database and advanced algorithms ensure accurate recommendations
+                </p>
+            </div>
+        </div>
+        
+        <div class="row g-4" id="stats-container">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <i class="fas fa-laptop mb-3" style="font-size: 2rem;"></i>
+                    <h3 class="fw-bold" id="total-laptops">-</h3>
+                    <p class="mb-0">Laptops Available</p>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <i class="fas fa-star mb-3" style="font-size: 2rem;"></i>
+                    <h3 class="fw-bold" id="total-reviews">-</h3>
+                    <p class="mb-0">User Reviews</p>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <i class="fas fa-tags mb-3" style="font-size: 2rem;"></i>
+                    <h3 class="fw-bold" id="total-brands">-</h3>
+                    <p class="mb-0">Brands Covered</p>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <i class="fas fa-percentage mb-3" style="font-size: 2rem;"></i>
+                    <h3 class="fw-bold" id="avg-rating">-</h3>
+                    <p class="mb-0">Average Rating</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Call to Action -->
+<section class="py-5 bg-primary text-white">
+    <div class="container text-center">
+        <h2 class="fw-bold mb-3">Ready to Find Your Perfect Laptop?</h2>
+        <p class="lead mb-4">
+            Join thousands of users who have found their ideal laptop through our intelligent recommendation system.
+        </p>
+        <a href="{{ url_for('recommend') }}" class="btn btn-light btn-lg">
+            <i class="fas fa-search me-2"></i>Get Started Now
+        </a>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Load system statistics
+    $.get('/api/stats', function(data) {
+        if (data.error) {
+            console.error('Error loading stats:', data.error);
+            return;
+        }
+        
+        $('#total-laptops').text(data.total_laptops.toLocaleString());
+        $('#total-reviews').text(data.total_reviews.toLocaleString());
+        $('#total-brands').text(data.brands);
+        $('#avg-rating').text(data.avg_rating.toFixed(1));
+    }).fail(function() {
+        console.error('Failed to load statistics');
+    });
+});
+</script>
+{% endblock %}

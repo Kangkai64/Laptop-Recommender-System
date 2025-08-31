@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block title %}Explore Laptops - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <h1 class="fw-bold mb-3">Explore Our Laptop Collection</h1>
+        <p class="lead text-muted">
+            Browse through our comprehensive database of laptops and discover amazing options
+        </p>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-laptop mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ stats.total_laptops|default(0) }}</h3>
+                <p class="mb-0">Total Laptops</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-tags mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ stats.brands|default(0) }}</h3>
+                <p class="mb-0">Brands Available</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-dollar-sign mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">RM {{ "%.0f"|format(stats.price_range.min|default(0)) }}</h3>
+                <p class="mb-0">Starting Price</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-star mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ "%.1f"|format(stats.avg_rating|default(0)) }}</h3>
+                <p class="mb-0">Average Rating</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">
+                <i class="fas fa-filter me-2 text-primary"></i>
+                Filter Laptops
+            </h5>
+            <form method="GET" action="{{ url_for('search') }}">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="brand_filter" class="form-label">Brand</label>
+                        <select class="form-select" id="brand_filter" name="brand">
+                            <option value="">All Brands</option>
+                            <option value="Apple">Apple</option>
+                            <option value="Dell">Dell</option>
+                            <option value="HP">HP</option>
+                            <option value="Lenovo">Lenovo</option>
+                            <option value="ASUS">ASUS</option>
+                            <option value="Acer">Acer</option>
+                            <option value="MSI">MSI</option>
+                            <option value="Razer">Razer</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label for="price_min_filter" class="form-label">Price Range (MYR)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="price_min_filter" name="price_min" placeholder="Min">
+                            <span class="input-group-text">-</span>
+                            <input type="number" class="form-control" id="price_max_filter" name="price_max" placeholder="Max">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label for="rating_filter" class="form-label">Minimum Rating</label>
+                        <select class="form-select" id="rating_filter" name="rating">
+                            <option value="">Any Rating</option>
+                            <option value="4.5">4.5+ Stars</option>
+                            <option value="4.0">4.0+ Stars</option>
+                            <option value="3.5">3.5+ Stars</option>
+                            <option value="3.0">3.0+ Stars</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-2"></i>Apply Filters
+                    </button>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-times me-2"></i>Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Laptops Grid -->
+    <div class="row g-4" id="laptops-container">
+        {% for laptop in laptops %}
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card laptop-card h-100">
+                <div class="card-body">
+                    <!-- Title and Brand -->
+                    <h5 class="card-title">{{ (laptop.title_y or 'Unknown Title') }}</h5>
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-tag me-1"></i>{{ laptop.brand or 'Unknown Brand' }}
+                    </p>
+                    
+                    <!-- Rating -->
+                    <div class="mb-2">
+                        <span class="rating-stars">
+                            {% for i in range(5) %}
+                                {% if i < (laptop.average_rating or 0)|int %}
+                                    <i class="fas fa-star text-warning"></i>
+                                {% elif (laptop.average_rating or 0) % 1 >= 0.5 and i == (laptop.average_rating or 0)|int %}
+                                    <i class="fas fa-star-half-alt text-warning"></i>
+                                {% else %}
+                                    <i class="far fa-star text-warning"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </span>
+                        <span class="text-muted ms-2">({{ "%.1f"|format(laptop.average_rating or 0) }})</span>
+                    </div>
+                    
+                    <!-- Price -->
+                    <div class="mb-3">
+                        <span class="price-tag">
+                            RM {{ "%.2f"|format(laptop.price_myr or 0) }}
+                        </span>
+                    </div>
+                    
+                    <!-- Key Features -->
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            {% if laptop.features and laptop.features != '' %}
+                                {% set features_text = laptop.features %}
+                                {% if features_text|length > 100 %}
+                                    {% set features_text = features_text[:100] + '...' %}
+                                {% endif %}
+                                <div class="features-text">{{ features_text }}</div>
+                            {% else %}
+                                <span class="text-muted">No features available</span>
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="card-footer bg-transparent">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('laptop_detail', laptop_id=laptop.asin) }}" 
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-info-circle me-1"></i>Details
+                        </a>
+                        <button class="btn btn-outline-secondary btn-sm" 
+                                onclick="addToCompare('{{ laptop.asin }}', '{{ laptop.title_y|tojson|safe }}', '{{ laptop.brand }}', '{{ laptop.price_myr }}', '{{ laptop.average_rating }}')">
+                            <i class="fas fa-plus me-1"></i>Compare
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Load More Button -->
+    <div class="text-center mt-5">
+        <button class="btn btn-outline-primary btn-lg btn-load-more" onclick="loadMoreLaptops()">
+            <i class="fas fa-plus me-2"></i>Load More Laptops
+        </button>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-5">
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Need Specific Recommendations?</h5>
+                    <p class="text-muted">Get personalized laptop suggestions based on your preferences</p>
+                    <a href="{{ url_for('recommend') }}" class="btn btn-primary">
+                        <i class="fas fa-magic me-2"></i>Get Recommendations
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-bar feature-icon"></i>
+                    <h5>View Market Insights</h5>
+                    <p class="text-muted">Explore analytics and trends in the laptop market</p>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-primary">
+                        <i class="fas fa-chart-line me-2"></i>View Analytics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let isLoading = false;
+let hasMoreLaptops = true;
+
+function loadMoreLaptops() {
+    if (isLoading || !hasMoreLaptops) return;
+    
+    isLoading = true;
+    currentPage++;
+    
+    // Show loading state
+    const loadMoreBtn = document.querySelector('.btn-load-more');
+    const originalText = loadMoreBtn.innerHTML;
+    loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+    loadMoreBtn.disabled = true;
+    
+    // Make AJAX request
+    fetch(`/api/load-more-laptops?page=${currentPage}&per_page=20`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('API Response:', data); // Debug log
+            
+            if (data.error) {
+                console.error('API Error:', data.error);
+                alert('Error loading laptops: ' + data.error);
+                return;
+            }
+            
+            if (!data.laptops || !Array.isArray(data.laptops)) {
+                console.error('Invalid data structure:', data);
+                alert('Invalid data received from server');
+                return;
+            }
+            
+            // Add new laptops to the page
+            const laptopsContainer = document.getElementById('laptops-container');
+            
+            data.laptops.forEach(laptop => {
+                console.log('Processing laptop:', laptop); // Debug log
+                const laptopHtml = createLaptopCard(laptop);
+                laptopsContainer.insertAdjacentHTML('beforeend', laptopHtml);
+            });
+            
+            // Update has more flag
+            hasMoreLaptops = data.has_more;
+            
+            // Hide load more button if no more laptops
+            if (!hasMoreLaptops) {
+                loadMoreBtn.style.display = 'none';
+            }
+            
+            // Show success message
+            alert(`Loaded ${data.laptops.length} more laptops!`);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading laptops. Please try again. Error: ' + error.message);
+            currentPage--; // Revert page number on error
+        })
+        .finally(() => {
+            // Reset loading state
+            isLoading = false;
+            loadMoreBtn.innerHTML = originalText;
+            loadMoreBtn.disabled = false;
+        });
+}
+
+function createLaptopCard(laptop) {
+    // Safely handle features text
+    let featuresText = 'No features available';
+    if (laptop.features && typeof laptop.features === 'string' && laptop.features.length > 0) {
+        featuresText = laptop.features.length > 100 
+            ? laptop.features.substring(0, 100) + '...' 
+            : laptop.features;
+    }
+    
+    // Safely handle title
+    const title = laptop.title_y || 'Unknown Title';
+    
+    // Safely handle brand
+    const brand = laptop.brand || 'Unknown Brand';
+    
+    // Safely handle rating
+    const rating = parseFloat(laptop.average_rating) || 0;
+    
+    // Safely handle price
+    const price = parseFloat(laptop.price_myr) || 0;
+    
+    // Escape special characters for JavaScript
+    const escapedTitle = title.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    const escapedBrand = brand.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    
+    return `
+        <div class="col-lg-3 col-md-6 mb-4">
+            <div class="card laptop-card h-100">
+                <div class="card-body">
+                    <h6 class="card-title">${title}</h6>
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-tag me-1"></i>${brand}
+                    </p>
+                    
+                    <div class="mb-2">
+                        <span class="rating-stars">
+                            ${generateStars(rating)}
+                        </span>
+                        <span class="text-muted ms-2">(${rating.toFixed(1)})</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <span class="price-tag">RM ${price.toFixed(2)}</span>
+                    </div>
+                    
+                    <small class="text-muted">
+                        <div class="features-text">${featuresText}</div>
+                    </small>
+                </div>
+                
+                <div class="card-footer bg-transparent">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="/laptop/${laptop.asin}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-info-circle me-1"></i>Details
+                        </a>
+                        <button class="btn btn-outline-secondary btn-sm" 
+                                onclick="addToCompare('${laptop.asin}', '${escapedTitle}', '${escapedBrand}', '${price}', '${rating}')">
+                            <i class="fas fa-plus me-1"></i>Compare
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function generateStars(rating) {
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    let stars = '';
+    
+    for (let i = 0; i < fullStars; i++) {
+        stars += '<i class="fas fa-star text-warning"></i>';
+    }
+    
+    if (hasHalfStar) {
+        stars += '<i class="fas fa-star-half-alt text-warning"></i>';
+    }
+    
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+    for (let i = 0; i < emptyStars; i++) {
+        stars += '<i class="far fa-star text-warning"></i>';
+    }
+    
+    return stars;
+}
+
+$(document).ready(function() {
+    // Initialize any page-specific functionality
+    console.log('Explore page loaded');
+});
+</script>
+{% endblock %}

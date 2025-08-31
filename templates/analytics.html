@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <h1 class="fw-bold mb-3">System Analytics & Insights</h1>
+        <p class="lead text-muted">
+            Explore comprehensive statistics and trends from our laptop recommendation system
+        </p>
+    </div>
+
+    <!-- Key Statistics -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-laptop mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ analytics.total_laptops|default(0) }}</h3>
+                <p class="mb-0">Total Laptops</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-star mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ analytics.total_reviews|default(0) }}</h3>
+                <p class="mb-0">Total Reviews</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-users mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ analytics.unique_users|default(0) }}</h3>
+                <p class="mb-0">Unique Users</p>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stats-card">
+                <i class="fas fa-percentage mb-3" style="font-size: 2rem;"></i>
+                <h3 class="fw-bold">{{ "%.1f"|format(analytics.avg_rating|default(0)) }}</h3>
+                <p class="mb-0">Average Rating</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price Analysis -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-dollar-sign me-2 text-primary"></i>
+                        Price Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <h4 class="text-primary">RM {{ "%.0f"|format(analytics.price_stats.mean|default(0)) }}</h4>
+                            <small class="text-muted">Average Price</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="text-success">RM {{ "%.0f"|format(analytics.price_stats.median|default(0)) }}</h4>
+                            <small class="text-muted">Median Price</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="text-info">RM {{ "%.0f"|format(analytics.price_stats.std|default(0)) }}</h4>
+                            <small class="text-muted">Price Std Dev</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie me-2 text-primary"></i>
+                        Price Categories Distribution
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="bg-success text-white rounded p-2 mb-2">
+                                <small>Budget</small>
+                            </div>
+                            <small class="text-muted">≤RM2,375</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-info text-white rounded p-2 mb-2">
+                                <small>Mid-range</small>
+                            </div>
+                            <small class="text-muted">RM2,376-4,750</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-warning text-white rounded p-2 mb-2">
+                                <small>High-end</small>
+                            </div>
+                            <small class="text-muted">RM4,751-9,500</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-danger text-white rounded p-2 mb-2">
+                                <small>Premium</small>
+                            </div>
+                            <small class="text-muted">>RM9,500</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Brands -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tags me-2 text-primary"></i>
+                        Top Brands by Number of Laptops
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if analytics.top_brands %}
+                        <div class="row">
+                            {% for brand, count in analytics.top_brands.items() %}
+                            <div class="col-md-6 mb-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold">{{ brand }}</span>
+                                    <span class="badge bg-primary">{{ count }}</span>
+                                </div>
+                                <div class="progress mt-1" style="height: 8px;">
+                                    <div class="progress-bar" style="width: {{ (count / analytics.total_laptops * 100)|round(1) }}%"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center">No brand data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Rating Distribution -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-star text-warning me-2"></i>Rating Distribution</h5>
+                </div>
+                <div class="card-body">
+                    {% set rating_dist = analytics.rating_distribution %}
+                    {% if rating_dist %}
+                        {% for rating in range(1, 6) %}
+                            {% set count = rating_dist.get(rating|string, 0) %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex align-items-center">
+                                    <span class="rating-stars me-2">
+                                        {% for i in range(5) %}
+                                            {% if i < rating %}
+                                                <i class="fas fa-star text-warning"></i>
+                                            {% else %}
+                                                <i class="far fa-star text-warning"></i>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </span>
+                                </div>
+                                <span class="badge bg-secondary">{{ count }}</span>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No rating data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Performance -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tachometer-alt me-2 text-primary"></i>
+                        System Performance Metrics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-success">80%+</h4>
+                            <small class="text-muted">User Requirement Coverage</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-info">&lt;2s</h4>
+                            <small class="text-muted">Average Response Time</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-warning">1000+</h4>
+                            <small class="text-muted">Laptop Records</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-primary">SAUE</h4>
+                            <small class="text-muted">Approach Used</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs me-2 text-primary"></i>
+                        Algorithm Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>Content-Based Filtering</h6>
+                        <small class="text-muted">Analyzes laptop features and specifications for similarity matching</small>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Collaborative Filtering</h6>
+                        <small class="text-muted">Uses user behavior patterns and preferences for recommendations</small>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Hybrid Approach</h6>
+                        <small class="text-muted">Combines both methods for optimal recommendation accuracy</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Get Recommendations</h5>
+                    <p class="text-muted">Try our intelligent recommendation system</p>
+                    <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary">Get Started</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-compass feature-icon"></i>
+                    <h5>Explore Laptops</h5>
+                    <p class="text-muted">Browse our complete laptop collection</p>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-primary">Explore</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Search Database</h5>
+                    <p class="text-muted">Search for specific laptops or features</p>
+                    <a href="{{ url_for('search') }}" class="btn btn-outline-primary">Search</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Add any analytics-specific JavaScript here
+    console.log('Analytics page loaded');
+    
+    // Example: Add click tracking for analytics
+    $('.btn').on('click', function() {
+        const action = $(this).text().trim();
+        console.log('User clicked:', action);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}{{ laptop.title_y[:50] }} - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('explore') }}">Explore</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ laptop.brand }}</li>
+        </ol>
+    </nav>
+
+    <!-- Laptop Details -->
+    <div class="row">
+        <!-- Laptop Image and Basic Info -->
+        <div class="col-lg-6">
+            <div class="card mb-4">
+                <div class="card-body text-center">
+                    <!-- Laptop Image Placeholder -->
+                    <div class="bg-light rounded p-5 mb-4">
+                        <i class="fas fa-laptop" style="font-size: 8rem; color: #6c757d;"></i>
+                    </div>
+                    
+                    <!-- Title -->
+                    <h2 class="fw-bold mb-3">{{ laptop.title_y }}</h2>
+                    
+                    <!-- Brand -->
+                    <p class="text-muted mb-3">
+                        <i class="fas fa-tag me-2"></i>{{ laptop.brand }}
+                    </p>
+                    
+                    <!-- Rating -->
+                    <div class="mb-3">
+                        <span class="rating-stars" style="font-size: 1.5rem;">
+                            {% for i in range(5) %}
+                                {% if i < laptop.average_rating|int %}
+                                    <i class="fas fa-star"></i>
+                                {% elif laptop.average_rating % 1 >= 0.5 and i == laptop.average_rating|int %}
+                                    <i class="fas fa-star-half-alt"></i>
+                                {% else %}
+                                    <i class="far fa-star"></i>
+                                {% endif %}
+                            {% endfor %}
+                        </span>
+                        <span class="ms-2 fs-5">({{ "%.1f"|format(laptop.average_rating) }})</span>
+                    </div>
+                    
+                    <!-- Price -->
+                    <div class="mb-4">
+                        <span class="price-tag" style="font-size: 1.5rem; padding: 10px 25px;">
+                            RM {{ "%.2f"|format(laptop.price_myr) }}
+                        </span>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2 d-md-block">
+                        <button class="btn btn-primary btn-lg" onclick="addToCompare('{{ laptop.asin }}')">
+                            <i class="fas fa-plus me-2"></i>Add to Comparison
+                        </button>
+                        <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-search me-2"></i>Get Similar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Specifications -->
+        <div class="col-lg-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs me-2 text-primary"></i>
+                        Specifications
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Brand</h6>
+                            <p class="text-muted">{{ laptop.brand }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Price Category</h6>
+                            <p class="text-muted">{{ laptop.price_category_myr }}</p>
+                        </div>
+                    </div>
+                    
+                    {% if laptop.details %}
+                        {% for key, value in laptop.details.items() %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>{{ key|title }}</h6>
+                                <p class="text-muted">{{ value }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <!-- Features -->
+                    {% if laptop.features %}
+                    <div class="mt-4">
+                        <h6>Key Features</h6>
+                        <div class="features-text">
+                            {{ laptop.features }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Similar Laptops -->
+    {% if similar_laptops %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h3 class="mb-4">
+                <i class="fas fa-thumbs-up me-2 text-primary"></i>
+                Similar Laptops You Might Like
+            </h3>
+            
+            <div class="row g-4">
+                {% for similar in similar_laptops %}
+                <div class="col-lg-3 col-md-6">
+                    <div class="card laptop-card h-100">
+                        <!-- Laptop Image Placeholder -->
+                        <div class="card-img-top bg-light text-center py-3" style="height: 150px;">
+                            <i class="fas fa-laptop" style="font-size: 3rem; color: #6c757d;"></i>
+                        </div>
+                        
+                        <div class="card-body">
+                            <!-- Title and Brand -->
+                            <h6 class="card-title">{{ similar.title_y[:40] }}{% if similar.title_y|length > 40 %}...{% endif %}</h6>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-tag me-1"></i>{{ similar.brand }}
+                            </p>
+                            
+                            <!-- Rating -->
+                            <div class="mb-2">
+                                <span class="rating-stars">
+                                    {% for i in range(5) %}
+                                        {% if i < similar.average_rating|int %}
+                                            <i class="fas fa-star"></i>
+                                        {% elif similar.average_rating % 1 >= 0.5 and i == similar.average_rating|int %}
+                                            <i class="fas fa-star-half-alt"></i>
+                                        {% else %}
+                                            <i class="far fa-star"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                                <span class="text-muted ms-2">({{ "%.1f"|format(similar.average_rating) }})</span>
+                            </div>
+                            
+                            <!-- Price -->
+                            <div class="mb-3">
+                                <span class="price-tag">
+                                    RM {{ "%.2f"|format(similar.price_myr) }}
+                                </span>
+                            </div>
+                            
+                            <!-- Similarity Score -->
+                            {% if similar.similarity_score %}
+                            <div class="mb-3">
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar bg-success" 
+                                         style="width: {{ (similar.similarity_score * 100)|round(1) }}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    {{ (similar.similarity_score * 100)|round(1) }}% similar
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ url_for('laptop_detail', laptop_id=similar.asin) }}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </a>
+                                <button class="btn btn-outline-secondary btn-sm" 
+                                        onclick="addToCompare('{{ similar.asin }}')">
+                                    <i class="fas fa-plus me-1"></i>Compare
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Comparison Section -->
+    <div class="card mt-5" id="comparison-section" style="display: none;">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-balance-scale me-2"></i>
+                Compare Selected Laptops
+            </h5>
+        </div>
+        <div class="card-body">
+            <div id="comparison-table"></div>
+            <div class="text-center mt-3">
+                <button class="btn btn-outline-danger btn-sm" onclick="clearComparison()">
+                    <i class="fas fa-trash me-1"></i>Clear Comparison
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Get Recommendations</h5>
+                    <p class="text-muted">Find more laptops like this one</p>
+                    <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary">Get Started</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-compass feature-icon"></i>
+                    <h5>Explore More</h5>
+                    <p class="text-muted">Browse our complete collection</p>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-primary">Explore</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-chart-bar feature-icon"></i>
+                    <h5>View Analytics</h5>
+                    <p class="text-muted">See market insights and trends</p>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-outline-primary">Analytics</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let comparisonLaptops = [];
+
+function addToCompare(laptopId) {
+    if (comparisonLaptops.length >= 3) {
+        alert('You can compare up to 3 laptops at a time.');
+        return;
+    }
+    
+    if (comparisonLaptops.includes(laptopId)) {
+        alert('This laptop is already in your comparison.');
+        return;
+    }
+    
+    comparisonLaptops.push(laptopId);
+    updateComparisonSection();
+}
+
+function removeFromCompare(laptopId) {
+    comparisonLaptops = comparisonLaptops.filter(id => id !== laptopId);
+    updateComparisonSection();
+}
+
+function clearComparison() {
+    comparisonLaptops = [];
+    updateComparisonSection();
+}
+
+function updateComparisonSection() {
+    if (comparisonLaptops.length === 0) {
+        $('#comparison-section').hide();
+        return;
+    }
+    
+    $('#comparison-section').show();
+    
+    let html = '<div class="row">';
+    comparisonLaptops.forEach((laptopId, index) => {
+        html += `
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6>Laptop ${index + 1}</h6>
+                        <p class="text-muted">ID: ${laptopId}</p>
+                        <button class="btn btn-outline-danger btn-sm" onclick="removeFromCompare('${laptopId}')">
+                            <i class="fas fa-times me-1"></i>Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    $('#comparison-table').html(html);
+}
+
+$(document).ready(function() {
+    console.log('Laptop detail page loaded');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Your Recommendations - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="row mb-5">
+        <div class="col-lg-8">
+            <h1 class="fw-bold mb-3">Your Personalized Recommendations</h1>
+            <p class="lead text-muted">
+                Based on your preferences, here are the best laptops that match your requirements.
+            </p>
+        </div>
+        <div class="col-lg-4 text-lg-end">
+            <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-2"></i>Modify Preferences
+            </a>
+        </div>
+    </div>
+
+    <!-- Preferences Summary -->
+    <div class="card mb-4 bg-light">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="fas fa-cog me-2 text-primary"></i>
+                Your Preferences Summary
+            </h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Budget:</strong><br>
+                    RM {{ "%.2f"|format(preferences.budget_min) }} - RM {{ "%.2f"|format(preferences.budget_max) }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Brand:</strong><br>
+                    {{ preferences.brand if preferences.brand else 'Any Brand' }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Use Case:</strong><br>
+                    {{ preferences.use_case|title }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Priority:</strong><br>
+                    {{ preferences.priority|title }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    {% if recommendations %}
+        <div class="row g-4">
+            {% for laptop in recommendations %}
+            <div class="col-lg-6 col-xl-4">
+                <div class="card laptop-card h-100">
+                    <div class="card-body">
+                        <!-- Title and Brand -->
+                        <h5 class="card-title">{{ laptop.title_y[:100] }}{% if laptop.title_y|length > 100 %}...{% endif %}</h5>
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-tag me-1"></i>{{ laptop.brand }}
+                        </p>
+                        
+                        <!-- Rating -->
+                        <div class="mb-2">
+                            <span class="rating-stars">
+                                {% for i in range(5) %}
+                                    {% if i < laptop.average_rating|int %}
+                                        <i class="fas fa-star text-warning"></i>
+                                    {% elif laptop.average_rating % 1 >= 0.5 and i == laptop.average_rating|int %}
+                                        <i class="fas fa-star-half-alt text-warning"></i>
+                                    {% else %}
+                                        <i class="far fa-star text-warning"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </span>
+                            <span class="text-muted ms-2">({{ "%.1f"|format(laptop.average_rating) }})</span>
+                        </div>
+                        
+                        <!-- Price -->
+                        <div class="mb-3">
+                            <span class="price-tag">
+                                RM {{ "%.2f"|format(laptop.price_myr) }}
+                            </span>
+                        </div>
+                        
+                        <!-- Key Features -->
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                {% if laptop.features and laptop.features != '' %}
+                                    {% set features_text = laptop.features %}
+                                    {% if features_text|length > 100 %}
+                                        {% set features_text = features_text[:100] + '...' %}
+                                    {% endif %}
+                                    <div class="features-text">{{ features_text }}</div>
+                                {% else %}
+                                    <span class="text-muted">No features available</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        
+                        <!-- Similarity Score -->
+                        {% if laptop.similarity_score %}
+                        <div class="mb-3">
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-success" 
+                                     style="width: {{ (laptop.similarity_score * 100)|round(1) }}%"></div>
+                            </div>
+                            <small class="text-muted">
+                                Match Score: {{ (laptop.similarity_score * 100)|round(1) }}%
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="card-footer bg-transparent">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <a href="{{ url_for('laptop_detail', laptop_id=laptop.asin) }}" 
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-info-circle me-1"></i>Details
+                            </a>
+                            <button class="btn btn-outline-secondary btn-sm" 
+                                    onclick="addToCompare('{{ laptop.asin }}', '{{ laptop.title_y }}', '{{ laptop.brand }}', '{{ laptop.price_myr }}', '{{ laptop.average_rating }}')">
+                                <i class="fas fa-plus me-1"></i>Compare
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- No Results Message -->
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-search" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;"></i>
+            <h3>No Recommendations Found</h3>
+            <p class="text-muted">
+                We couldn't find laptops matching your current preferences. 
+                Try adjusting your budget range or relaxing some requirements.
+            </p>
+            <a href="{{ url_for('recommend') }}" class="btn btn-primary">
+                <i class="fas fa-edit me-2"></i>Modify Preferences
+            </a>
+        </div>
+    {% endif %}
+
+    <!-- Alternative Actions -->
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-compass feature-icon"></i>
+                    <h5>Explore More</h5>
+                    <p class="text-muted">Browse through our complete laptop collection</p>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-primary">Explore</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Search Specific</h5>
+                    <p class="text-muted">Search for specific brands or features</p>
+                    <a href="{{ url_for('search') }}" class="btn btn-outline-primary">Search</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-chart-bar feature-icon"></i>
+                    <h5>View Analytics</h5>
+                    <p class="text-muted">See market trends and insights</p>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-outline-primary">Analytics</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize any page-specific functionality
+    console.log('Recommendations page loaded');
+});
+</script>
+{% endblock %}
