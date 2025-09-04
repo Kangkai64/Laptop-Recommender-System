@@ -200,13 +200,13 @@ $(document).ready(function() {
         
         if (budgetMin > budgetMax) {
             e.preventDefault();
-            alert('Minimum budget cannot be greater than maximum budget.');
+            showNotification('Minimum budget cannot be greater than maximum budget.', 'warning');
             return false;
         }
         
         if (budgetMin < 0 || budgetMax < 0) {
             e.preventDefault();
-            alert('Budget values cannot be negative.');
+            showNotification('Budget values cannot be negative.', 'warning');
             return false;
         }
         

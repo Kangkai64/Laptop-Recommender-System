@@ -522,8 +522,8 @@ def explore():
         'avg_rating': df_laptop['average_rating'].mean()
     }
     
-    # Get sample laptops for browsing and format for templates
-    sample_laptops_raw = df_laptop.sample(min(20, len(df_laptop)))
+    # Get first 20 laptops for browsing (consistent with API pagination)
+    sample_laptops_raw = df_laptop.iloc[:min(20, len(df_laptop))]
     sample_laptops = []
     
     for _, laptop in sample_laptops_raw.iterrows():
@@ -543,15 +543,15 @@ def explore():
     
     return render_template('explore.html', stats=stats, laptops=sample_laptops)
 
-@app.route('/laptop/<laptop_id>')
+@app.route('/laptop/<int:laptop_id>')
 def laptop_detail(laptop_id):
     """Detailed view of a specific laptop."""
     if df_laptop is None:
         flash('Data not loaded. Please try again.', 'error')
         return redirect(url_for('index'))
     
-    # Find the laptop
-    laptop = df_laptop[df_laptop['asin'] == laptop_id]
+    # Find the laptop using laptop_id
+    laptop = df_laptop[df_laptop['laptop_id'] == laptop_id]
     if laptop.empty:
         flash('Laptop not found.', 'error')
         return redirect(url_for('explore'))

@@ -248,13 +248,13 @@ class ContentBasedFiltering:
             logger.error(f"Error computing similarity matrix: {str(e)}")
             raise
     
-    def get_recommendations(self, laptop_id: str, n_recommendations: int = 5,
+    def get_recommendations(self, laptop_id: int, n_recommendations: int = 5,
                           exclude_self: bool = True, min_similarity: float = 0.1) -> List[Dict]:
         """
         Get top-N similar laptops for a given laptop.
         
         Args:
-            laptop_id: ASIN of the source laptop
+            laptop_id: laptop_id of the source laptop
             n_recommendations: Number of recommendations to return
             exclude_self: Whether to exclude the source laptop
             min_similarity: Minimum similarity threshold
@@ -266,10 +266,10 @@ class ContentBasedFiltering:
             self.compute_similarity_matrix()
         
         try:
-            # Find laptop index
-            laptop_mask = self.df_laptop['asin'] == laptop_id
+            # Find laptop index using laptop_id
+            laptop_mask = self.df_laptop['laptop_id'] == laptop_id
             if not laptop_mask.any():
-                raise ValueError(f"Laptop with ASIN {laptop_id} not found")
+                raise ValueError(f"Laptop with ID {laptop_id} not found")
             
             laptop_idx = laptop_mask.idxmax()
             
@@ -293,6 +293,7 @@ class ContentBasedFiltering:
                 original_idx = valid_indices[idx]
                 laptop_data = self.df_laptop.iloc[original_idx]
                 recommendations.append({
+                    'laptop_id': laptop_data['laptop_id'],
                     'asin': laptop_data['asin'],
                     'title_y': laptop_data['title_y_clean'],  # Fix: use title_y instead of title
                     'brand': laptop_data['brand_encoded'],

@@ -196,7 +196,7 @@
                 
                 <div class="card-footer bg-transparent">
                     <div class="d-flex justify-content-between align-items-center">
-                        <a href="{{ url_for('laptop_detail', laptop_id=laptop.asin) }}" 
+                        <a href="{{ url_for('laptop_detail', laptop_id=laptop.laptop_id) }}" 
                            class="btn btn-outline-primary btn-sm">
                             <i class="fas fa-info-circle me-1"></i>Details
                         </a>
@@ -282,13 +282,13 @@ function loadMoreLaptops() {
             
             if (data.error) {
                 console.error('API Error:', data.error);
-                alert('Error loading laptops: ' + data.error);
+                showNotification('Error loading laptops: ' + data.error, 'error');
                 return;
             }
             
             if (!data.laptops || !Array.isArray(data.laptops)) {
                 console.error('Invalid data structure:', data);
-                alert('Invalid data received from server');
+                showNotification('Invalid data received from server', 'error');
                 return;
             }
             
@@ -310,7 +310,7 @@ function loadMoreLaptops() {
             }
             
             // Show success message
-            alert(`Loaded ${data.laptops.length} more laptops!`);
+            showNotification(`Loaded ${data.laptops.length} more laptops!`, 'success');
         })
         .catch(error => {
             console.error('Error:', error);
@@ -326,7 +326,7 @@ function loadMoreLaptops() {
             } else if (error.message) {
                 errorMessage += ' Error: ' + error.message;
             }
-            alert(errorMessage);
+            showNotification(errorMessage, 'error');
             currentPage--; // Revert page number on error
         })
         .finally(() => {
@@ -413,7 +413,7 @@ function createLaptopCard(laptop) {
                 
                 <div class="card-footer bg-transparent">
                     <div class="d-flex justify-content-between align-items-center">
-                        <a href="/laptop/${laptop.asin}" class="btn btn-outline-primary btn-sm">
+                        <a href="/laptop/${laptop.laptop_id}" class="btn btn-outline-primary btn-sm">
                             <i class="fas fa-info-circle me-1"></i>Details
                         </a>
                         <button class="btn btn-outline-secondary btn-sm" 

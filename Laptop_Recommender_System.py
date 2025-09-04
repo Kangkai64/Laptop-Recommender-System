@@ -448,13 +448,13 @@ class LaptopRecommenderSystem:
             'min_rating': 3.0
         })
     
-    def find_similar_laptops(self, laptop_id: str, n_recommendations: int = None,
+    def find_similar_laptops(self, laptop_id: int, n_recommendations: int = None,
                             method: str = 'content_based') -> List[Dict]:
         """
         Find laptops similar to a given laptop.
         
         Args:
-            laptop_id: ASIN of the reference laptop
+            laptop_id: laptop_id (integer) of the reference laptop
             n_recommendations: Number of similar laptops to return
             method: Method to use ('content_based' or 'collaborative')
             

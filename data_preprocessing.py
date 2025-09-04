@@ -117,8 +117,19 @@ class LaptopDataPreprocessor:
             logger.warning("No media columns (images_y, videos) found in dataset")
         
         # Create separate dataframes
-        df_laptop = df[available_laptop_cols].drop_duplicates(subset=['asin']).reset_index(drop=True)
+        # Use title_y for deduplication since same products can have different ASINs
+        df_laptop = df[available_laptop_cols].drop_duplicates(subset=['title_y']).reset_index(drop=True)
         df_rating = df[available_rating_cols].reset_index(drop=True)
+        
+        # Add laptop_id as primary key (simple integer index)
+        df_laptop['laptop_id'] = range(len(df_laptop))
+        
+        # Create mapping from asin to laptop_id for rating dataframe
+        asin_to_laptop_id = df_laptop.set_index('asin')['laptop_id'].to_dict()
+        df_rating['laptop_id'] = df_rating['asin'].map(asin_to_laptop_id)
+        
+        # Remove ratings that don't have corresponding laptops (due to deduplication)
+        df_rating = df_rating.dropna(subset=['laptop_id']).reset_index(drop=True)
         
         logger.info(f"Laptop dataframe shape: {df_laptop.shape}")
         logger.info(f"Rating dataframe shape: {df_rating.shape}")
@@ -219,7 +230,10 @@ class LaptopDataPreprocessor:
         # Add media columns (images and videos)
         media_columns = [col for col in df_normalized.columns if col in ['images_y', 'videos']]
         
-        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns + specification_columns + media_columns
+        # Add laptop_id column (created during separation)
+        id_columns = [col for col in df_normalized.columns if col == 'laptop_id']
+        
+        final_columns = essential_columns + encoded_columns + clean_columns + numerical_columns + specification_columns + media_columns + id_columns
         available_final_columns = [col for col in final_columns if col in df_normalized.columns]
         
         df_final = df_normalized[available_final_columns]

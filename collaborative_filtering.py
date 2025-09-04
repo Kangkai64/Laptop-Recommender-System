@@ -476,7 +476,12 @@ class CollaborativeFiltering:
             # Format final recommendations
             formatted_recommendations = []
             for rec in top_recs:
+                # Get laptop_id from asin
+                laptop_row = self.df_laptop[self.df_laptop['asin'] == rec['asin']]
+                laptop_id = laptop_row['laptop_id'].iloc[0] if not laptop_row.empty else None
+                
                 formatted_rec = {
+                    'laptop_id': laptop_id,
                     'asin': rec['asin'],
                     'title': rec['title'],
                     'brand': rec['brand'],
