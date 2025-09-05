@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "laptop-recommender": {
+      "command": "python",
+      "args": [
+        "laptop_recommender_mcp.py"
+      ],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}

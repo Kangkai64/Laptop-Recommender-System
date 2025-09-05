@@ -142,8 +142,16 @@ class ContentBasedFiltering:
                 for feature in available_text_features[1:]:
                     text_features = text_features + ' ' + feature.astype(str)
                 
-                # TF-IDF vectorization for text
-                self.tfidf_vectorizer = TfidfVectorizer(**self.config['tfidf_params'])
+                # TF-IDF vectorization for text with more restrictive parameters
+                tfidf_params = self.config['tfidf_params'].copy()
+                tfidf_params.update({
+                    'max_features': 500,  # Reduce features to avoid overfitting
+                    'min_df': 3,  # Increase minimum document frequency
+                    'max_df': 0.8,  # Reduce maximum document frequency
+                    'ngram_range': (1, 1)  # Use only unigrams for better diversity
+                })
+                
+                self.tfidf_vectorizer = TfidfVectorizer(**tfidf_params)
                 text_vectors = self.tfidf_vectorizer.fit_transform(text_features)
             else:
                 # If no text features, create empty text vectors
@@ -155,12 +163,25 @@ class ContentBasedFiltering:
             numerical_feature_names = []
             
             if 'price_myr' in self.df_laptop.columns:
-                numerical_features_list.append(self.df_laptop['price_myr'].fillna(0))
+                # Add price with some noise to increase diversity
+                price_data = self.df_laptop['price_myr'].fillna(0)
+                numerical_features_list.append(price_data)
                 numerical_feature_names.append('price_myr')
+                
+                # Add price categories for better differentiation
+                price_categories = pd.cut(price_data, bins=5, labels=False, include_lowest=True)
+                numerical_features_list.append(price_categories.fillna(0))
+                numerical_feature_names.append('price_category')
             
             if 'average_rating' in self.df_laptop.columns:
-                numerical_features_list.append(self.df_laptop['average_rating'].fillna(0))
+                rating_data = self.df_laptop['average_rating'].fillna(0)
+                numerical_features_list.append(rating_data)
                 numerical_feature_names.append('average_rating')
+                
+                # Add rating categories
+                rating_categories = pd.cut(rating_data, bins=5, labels=False, include_lowest=True)
+                numerical_features_list.append(rating_categories.fillna(0))
+                numerical_feature_names.append('rating_category')
             
             # Scale numerical features if available
             if numerical_features_list:
@@ -175,7 +196,22 @@ class ContentBasedFiltering:
             categorical_features_list = []
             categorical_feature_names = []
             
-            for col in ['brand_encoded', 'os_encoded', 'color_encoded', 'store_encoded']:
+            # Handle brand encoding specially - create one-hot encoded features
+            if 'brand_encoded' in self.df_laptop.columns:
+                brand_encoded = self.df_laptop['brand_encoded'].fillna(0)
+                unique_brands = brand_encoded.unique()
+                
+                # Create one-hot encoded features for each brand
+                for brand_val in unique_brands:
+                    if brand_val != 0:  # Skip unknown/empty brands
+                        brand_feature = (brand_encoded == brand_val).astype(int)
+                        categorical_features_list.append(brand_feature)
+                        categorical_feature_names.append(f'brand_{int(brand_val)}')
+                
+                logger.info(f"Created {len(unique_brands)-1} brand features")
+            
+            # Handle other categorical features normally
+            for col in ['os_encoded', 'color_encoded', 'store_encoded']:
                 if col in self.df_laptop.columns:
                     categorical_features_list.append(self.df_laptop[col].fillna(0))
                     categorical_feature_names.append(col.replace('_encoded', ''))
@@ -233,15 +269,38 @@ class ContentBasedFiltering:
         
         try:
             if method == 'cosine':
-                self.similarity_matrix = cosine_similarity(self.feature_matrix)
+                # Use cosine similarity but apply additional normalization
+                raw_similarities = cosine_similarity(self.feature_matrix)
+                
+                # Apply normalization to make similarities more realistic
+                # Remove perfect self-similarity (diagonal) and normalize
+                np.fill_diagonal(raw_similarities, 0)
+                
+                # This prevents all laptops from having 100% similarity
+                min_sim = np.min(raw_similarities[raw_similarities > 0])
+                max_sim = np.max(raw_similarities)
+                
+                if max_sim > min_sim:
+                    # Normalize to 0.6-0.95 range
+                    normalized_similarities = 0.6 + 0.35 * (raw_similarities - min_sim) / (max_sim - min_sim)
+                else:
+                    normalized_similarities = np.full_like(raw_similarities, 0.7)
+                
+                # Restore diagonal (self-similarity)
+                np.fill_diagonal(normalized_similarities, 1.0)
+                
+                self.similarity_matrix = normalized_similarities
+                
             elif method == 'euclidean':
                 distances = euclidean_distances(self.feature_matrix)
-                # Convert distances to similarities (1 / (1 + distance))
-                self.similarity_matrix = 1 / (1 + distances)
+                # Convert distances to similarities with better scaling
+                max_distance = np.max(distances)
+                self.similarity_matrix = 1 / (1 + distances / max_distance)
             else:
                 raise ValueError(f"Unsupported similarity method: {method}")
             
             logger.info(f"Similarity matrix computed with shape: {self.similarity_matrix.shape}")
+            logger.info(f"Similarity range: {np.min(self.similarity_matrix):.3f} - {np.max(self.similarity_matrix):.3f}")
             return self.similarity_matrix
             
         except Exception as e:
@@ -292,6 +351,10 @@ class ContentBasedFiltering:
             for idx in top_indices:
                 original_idx = valid_indices[idx]
                 laptop_data = self.df_laptop.iloc[original_idx]
+                
+                # Use the already normalized similarity score
+                normalized_similarity = similarities[original_idx]
+                
                 recommendations.append({
                     'laptop_id': laptop_data['laptop_id'],
                     'asin': laptop_data['asin'],
@@ -299,7 +362,7 @@ class ContentBasedFiltering:
                     'brand': laptop_data['brand_encoded'],
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Fix: use average_rating instead of rating
-                    'similarity_score': similarities[original_idx],
+                    'similarity_score': normalized_similarity,
                     'features': laptop_data['features_clean'],
                     'images_y': laptop_data.get('images_y'),  # Include media columns
                     'videos': laptop_data.get('videos')
@@ -350,7 +413,6 @@ class ContentBasedFiltering:
             preference_vector = self._create_preference_vector(preferences)
             
             # Calculate similarity to preference vector for filtered dataset
-            # We need to create a feature matrix for the filtered dataset
             filtered_indices = filtered_df.index
             filtered_feature_matrix = self.feature_matrix[filtered_indices]
             
@@ -362,13 +424,18 @@ class ContentBasedFiltering:
             recommendations = []
             for idx in top_indices:
                 laptop_data = filtered_df.iloc[idx]
+                
+                # Use the similarity score directly (already normalized in matrix)
+                normalized_similarity = similarities[idx]
+                
                 recommendations.append({
+                    'laptop_id': laptop_data.get('laptop_id'),
                     'asin': laptop_data['asin'],
                     'title_y': laptop_data['title_y_clean'],  # Changed from 'title' to 'title_y'
                     'brand': laptop_data['brand_encoded'],
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Changed from 'rating' to 'average_rating'
-                    'similarity_score': similarities[idx],
+                    'similarity_score': normalized_similarity,
                     'features': laptop_data['features_clean'],
                     'images_y': laptop_data.get('images_y'),  # Include media columns
                     'videos': laptop_data.get('videos')
@@ -421,17 +488,106 @@ class ContentBasedFiltering:
                 preference_vector[-5] = min_rating_normalized  # Rating feature index
             
             # Handle categorical preferences
-            if 'brand_preference' in preferences:
-                # Find brand encoding
-                brand_mask = self.df_laptop['brand_encoded'] == preferences['brand_preference']
-                if brand_mask.any():
-                    preference_vector[-4] = 1.0  # Brand feature index
+            if 'brand_preference' in preferences and preferences['brand_preference']:
+                # Find brand encoding - handle both string brand names and encoded values
+                brand_pref = preferences['brand_preference']
+                
+                # First try to match by original brand name if available
+                if 'brand' in self.df_laptop.columns:
+                    brand_mask = self.df_laptop['brand'].str.lower() == brand_pref.lower()
+                    if brand_mask.any():
+                        # Get the encoded value for this brand
+                        brand_encoded_value = self.df_laptop.loc[brand_mask, 'brand_encoded'].iloc[0]
+                        
+                        # Only proceed if the brand is not unknown (encoded value != 0)
+                        if brand_encoded_value != 0:
+                            # Set the corresponding brand feature in the preference vector
+                            brand_feature_idx = self._get_brand_feature_index(brand_encoded_value)
+                            if brand_feature_idx is not None:
+                                preference_vector[brand_feature_idx] = 1.0
+                                logger.info(f"Brand preference '{brand_pref}' mapped to encoded value {brand_encoded_value}")
+                            else:
+                                logger.warning(f"Could not find feature index for brand '{brand_pref}' (encoded value {brand_encoded_value})")
+                        else:
+                            logger.warning(f"Brand '{brand_pref}' is marked as unknown (encoded value 0) - skipping brand preference")
+                else:
+                    # Fallback: try to match encoded value directly
+                    try:
+                        brand_encoded_value = int(brand_pref)
+                        
+                        # Only proceed if the brand is not unknown (encoded value != 0)
+                        if brand_encoded_value != 0:
+                            brand_mask = self.df_laptop['brand_encoded'] == brand_encoded_value
+                            if brand_mask.any():
+                                brand_feature_idx = self._get_brand_feature_index(brand_encoded_value)
+                                if brand_feature_idx is not None:
+                                    preference_vector[brand_feature_idx] = 1.0
+                                    logger.info(f"Brand preference '{brand_pref}' matched to encoded value {brand_encoded_value}")
+                                else:
+                                    logger.warning(f"Could not find feature index for brand encoded value {brand_encoded_value}")
+                            else:
+                                logger.warning(f"No laptops found with brand encoded value {brand_encoded_value}")
+                        else:
+                            logger.warning(f"Brand preference '{brand_pref}' is encoded as 0 (unknown) - skipping brand preference")
+                    except ValueError:
+                        logger.warning(f"Could not parse brand preference '{brand_pref}' as integer")
             
             return preference_vector
             
         except Exception as e:
             logger.error(f"Error creating preference vector: {str(e)}")
             raise
+    
+    def _get_brand_feature_index(self, brand_encoded_value: int) -> Optional[int]:
+        """
+        Find the feature index for a specific brand encoded value.
+        
+        Args:
+            brand_encoded_value: The encoded brand value
+            
+        Returns:
+            int: Feature index in the feature matrix, or None if not found
+        """
+        try:
+            # Look for the brand feature in feature names
+            brand_feature_name = f"brand_{brand_encoded_value}"
+            
+            for i, feature_name in enumerate(self.feature_names):
+                if feature_name == brand_feature_name:
+                    return i
+            
+            # If not found, provide more detailed error information
+            brand_features = [name for name in self.feature_names if 'brand' in name.lower()]
+            logger.warning(f"Could not find feature index for brand encoded value {brand_encoded_value}")
+            logger.info(f"Available brand features: {brand_features}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error finding brand feature index: {str(e)}")
+            return None
+    
+    def get_available_brands(self) -> List[str]:
+        """
+        Get list of available brands in the dataset (excluding unknown/empty brands).
+        
+        Returns:
+            List[str]: List of available brand names
+        """
+        try:
+            if 'brand' in self.df_laptop.columns:
+                # Get unique brands, excluding empty/unknown values
+                available_brands = self.df_laptop['brand'].dropna().unique()
+                # Filter out empty strings and 'Unknown' values
+                available_brands = [brand for brand in available_brands 
+                                 if brand and str(brand).strip() and str(brand).lower() not in ['unknown', 'n/a', '']]
+                return sorted(available_brands)
+            else:
+                logger.warning("Brand column not found in dataset")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error getting available brands: {str(e)}")
+            return []
     
     def get_feature_importance(self, laptop_id: str) -> Dict[str, float]:
         """

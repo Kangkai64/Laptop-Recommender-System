@@ -371,6 +371,122 @@ class LaptopRecommenderSystem:
             logger.error(f"Error getting hybrid recommendations: {str(e)}")
             raise
     
+    def get_hybrid_recommendations_auto(self, preferences: Dict,
+                                      n_recommendations: int = None,
+                                      weights: Optional[Dict[str, float]] = None) -> List[Dict]:
+        """
+        Get automatic hybrid recommendations combining content-based and collaborative approaches
+        without requiring a specific user_id. Analyzes the dataset to find laptops that match
+        both user preferences and popular user behavior patterns.
+        
+        Args:
+            preferences: User preferences for content-based filtering
+            n_recommendations: Number of recommendations to return
+            weights: Weights for combining methods
+            
+        Returns:
+            List[Dict]: List of recommended laptops
+        """
+        if n_recommendations is None:
+            n_recommendations = self.config['system']['max_recommendations']
+        
+        if weights is None:
+            weights = {
+                'content_based': self.config['hybrid']['content_based_weight'],
+                'collaborative': self.config['hybrid']['collaborative_weight']
+            }
+        
+        try:
+            logger.info("Generating automatic hybrid recommendations based on dataset analysis")
+            
+            # Get content-based recommendations
+            content_based_recs = self.get_content_based_recommendations(
+                preferences, n_recommendations * 2
+            )
+            
+            # Get popular collaborative recommendations
+            collaborative_recs = self.collaborative_filter.get_popular_recommendations(
+                preferences, n_recommendations * 2
+            )
+            
+            # Combine recommendations
+            combined_recs = {}
+            
+            # Process content-based recommendations
+            for rec in content_based_recs:
+                asin = rec['asin']
+                if asin not in combined_recs:
+                    combined_recs[asin] = {
+                        'asin': asin,
+                        'title': rec.get('title_y', rec.get('title', 'Unknown')),
+                        'brand': rec.get('brand', 'Unknown'),
+                        'price_myr': rec.get('price_myr', 0),
+                        'rating': rec.get('average_rating', rec.get('rating', 0)),
+                        'combined_score': 0,
+                        'methods': [],
+                        'scores': {}
+                    }
+                
+                # Normalize content-based score
+                normalized_score = rec.get('similarity_score', rec.get('recommendation_score', 0))
+                combined_recs[asin]['combined_score'] += weights['content_based'] * normalized_score
+                combined_recs[asin]['methods'].append('content_based')
+                combined_recs[asin]['scores']['content_based'] = normalized_score
+            
+            # Process collaborative filtering recommendations
+            for rec in collaborative_recs:
+                asin = rec['asin']
+                if asin not in combined_recs:
+                    combined_recs[asin] = {
+                        'asin': asin,
+                        'title': rec.get('title', 'Unknown'),
+                        'brand': rec.get('brand', 'Unknown'),
+                        'price_myr': rec.get('price_myr', 0),
+                        'rating': rec.get('rating', 0),
+                        'combined_score': 0,
+                        'methods': [],
+                        'scores': {}
+                    }
+                
+                # Normalize collaborative filtering score
+                normalized_score = rec.get('recommendation_score', 0)
+                combined_recs[asin]['combined_score'] += weights['collaborative'] * normalized_score
+                combined_recs[asin]['methods'].append('collaborative')
+                combined_recs[asin]['scores']['collaborative'] = normalized_score
+            
+            # Sort by combined score and get top recommendations
+            sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
+            top_recs = sorted_recs[:n_recommendations]
+            
+            # Format final recommendations
+            formatted_recommendations = []
+            for rec in top_recs:
+                # Get laptop_id from asin
+                laptop_row = self.df_laptop[self.df_laptop['asin'] == rec['asin']]
+                laptop_id = laptop_row['laptop_id'].iloc[0] if not laptop_row.empty else None
+                
+                formatted_rec = {
+                    'laptop_id': laptop_id,
+                    'asin': rec['asin'],
+                    'title_y': rec['title'],
+                    'brand': rec['brand'],
+                    'price_myr': rec['price_myr'],
+                    'average_rating': rec['rating'],
+                    'recommendation_score': rec['combined_score'],
+                    'method': 'hybrid_auto',
+                    'methods_used': rec['methods'],
+                    'individual_scores': rec['scores'],
+                    'explanation': f"Smart hybrid: matches your preferences + popular with similar users"
+                }
+                formatted_recommendations.append(formatted_rec)
+            
+            logger.info(f"Generated {len(formatted_recommendations)} automatic hybrid recommendations")
+            return formatted_recommendations
+            
+        except Exception as e:
+            logger.error(f"Error getting automatic hybrid recommendations: {str(e)}")
+            raise
+    
     def get_recommendations_by_use_case(self, use_case: str, budget: float = None,
                                        n_recommendations: int = None) -> List[Dict]:
         """

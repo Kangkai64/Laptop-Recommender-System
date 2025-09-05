@@ -59,16 +59,23 @@
                             <label for="brand" class="form-label">Preferred Brand (Optional)</label>
                             <select class="form-select" id="brand" name="brand">
                                 <option value="">Any Brand</option>
-                                <option value="Apple">Apple</option>
-                                <option value="Dell">Dell</option>
-                                <option value="HP">HP</option>
-                                <option value="Lenovo">Lenovo</option>
-                                <option value="ASUS">ASUS</option>
-                                <option value="Acer">Acer</option>
-                                <option value="MSI">MSI</option>
-                                <option value="Razer">Razer</option>
-                                <option value="Samsung">Samsung</option>
-                                <option value="Toshiba">Toshiba</option>
+                                {% if available_brands %}
+                                    {% for brand in available_brands %}
+                                        <option value="{{ brand }}">{{ brand }}</option>
+                                    {% endfor %}
+                                {% else %}
+                                    <!-- Fallback options if dynamic brands are not available -->
+                                    <option value="Apple">Apple</option>
+                                    <option value="Dell">Dell</option>
+                                    <option value="HP">HP</option>
+                                    <option value="Lenovo">Lenovo</option>
+                                    <option value="ASUS">ASUS</option>
+                                    <option value="Acer">Acer</option>
+                                    <option value="MSI">MSI</option>
+                                    <option value="Razer">Razer</option>
+                                    <option value="Samsung">Samsung</option>
+                                    <option value="Toshiba">Toshiba</option>
+                                {% endif %}
                             </select>
                         </div>
 
@@ -133,6 +140,28 @@
                                 <option value="development">Software Development (Coding, Testing)</option>
                                 <option value="professional">Professional Work (CAD, 3D modeling)</option>
                             </select>
+                        </div>
+
+                        <!-- Algorithm Selection -->
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="fas fa-robot me-2 text-primary"></i>
+                                Recommendation Algorithm
+                            </h4>
+                            <label for="algorithm" class="form-label">Choose algorithm</label>
+                            <select class="form-select" id="algorithm" name="algorithm" required>
+                                <option value="content_based" selected>Content Based</option>
+                                <option value="collaborative">Collaborative (Popular & Trending)</option>
+                                <option value="hybrid">Hybrid (Content + Collaborative)</option>
+                            </select>
+                            <div class="form-text">
+                                <small class="text-muted">
+                                    <strong>Algorithm Descriptions:</strong><br>
+                                    • Content Based: Matches laptops based on features and specifications<br>
+                                    • Collaborative: Shows popular and trending laptops based on user behavior<br>
+                                    • Hybrid: Combines both approaches for comprehensive recommendations
+                                </small>
+                            </div>
                         </div>
 
                         <!-- Priority -->

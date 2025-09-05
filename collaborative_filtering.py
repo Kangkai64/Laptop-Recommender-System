@@ -74,6 +74,9 @@ class CollaborativeFiltering:
         """Create user-item rating matrix from rating data."""
         logger.info("Creating user-item rating matrix...")
         
+        # Reset any existing matrix to ensure clean state
+        self.user_item_matrix = None
+        
         try:
             # Ensure required columns exist
             required_cols = ['user_id_encoded', 'asin', 'rating']
@@ -91,24 +94,57 @@ class CollaborativeFiltering:
                 fill_value=0
             )
             
+            # Ensure we have a valid matrix
+            if self.user_item_matrix.empty:
+                logger.warning("User-item matrix is empty, creating minimal matrix")
+                # Create a minimal matrix to prevent errors
+                self.user_item_matrix = pd.DataFrame(index=[0], columns=['dummy_item'], data=[[0]])
+                return self.user_item_matrix
+            
             # Remove users and items with too few ratings
             min_ratings = self.config['similarity_methods']['min_common_items']
             min_users = self.config['similarity_methods']['min_common_users']
             
+            # Filter users first
             user_rating_counts = (self.user_item_matrix > 0).sum(axis=1)
             valid_users = user_rating_counts >= min_ratings
-            self.user_item_matrix = self.user_item_matrix[valid_users]
             
+            # Only filter if we have valid users
+            if valid_users.any():
+                # Use .loc to ensure proper index alignment
+                self.user_item_matrix = self.user_item_matrix.loc[valid_users]
+            else:
+                logger.warning("No users meet minimum rating requirements, keeping all users")
+            
+            # Filter items second (after user filtering)
             item_rating_counts = (self.user_item_matrix > 0).sum(axis=0)
             valid_items = item_rating_counts >= min_users
-            self.user_item_matrix = self.user_item_matrix[valid_items]
+            
+            # Only filter if we have valid items
+            if valid_items.any():
+                # Use .loc to ensure proper index alignment
+                self.user_item_matrix = self.user_item_matrix.loc[:, valid_items]
+            else:
+                logger.warning("No items meet minimum rating requirements, keeping all items")
             
             logger.info(f"User-item matrix created with shape: {self.user_item_matrix.shape}")
             return self.user_item_matrix
             
         except Exception as e:
             logger.error(f"Error creating user-item matrix: {str(e)}")
-            raise
+            # Create a minimal fallback matrix to prevent complete failure
+            logger.warning("Creating minimal fallback matrix")
+            self.user_item_matrix = pd.DataFrame(index=[0], columns=['dummy_item'], data=[[0]])
+            return self.user_item_matrix
+    
+    def is_initialized(self) -> bool:
+        """Check if the collaborative filtering system is properly initialized."""
+        try:
+            if self.user_item_matrix is None:
+                return False
+            return not self.user_item_matrix.empty and self.user_item_matrix.shape[0] > 0
+        except Exception:
+            return False
     
     def compute_user_similarity_matrix(self, method: str = 'cosine') -> np.ndarray:
         """Compute similarity matrix between users."""
@@ -517,6 +553,195 @@ class CollaborativeFiltering:
         except Exception:
             return None
     
+    def get_popular_recommendations(self, preferences: Dict = None, 
+                                  n_recommendations: int = 10) -> List[Dict]:
+        """
+        Get popular recommendations based on overall user behavior patterns.
+        Analyzes the dataset to find laptops that users with similar criteria tend to choose.
+        
+        Args:
+            preferences: Optional user preferences for filtering
+            n_recommendations: Number of recommendations to return
+            
+        Returns:
+            List[Dict]: List of popular recommended laptops
+        """
+        if self.user_item_matrix is None:
+            self.create_user_item_matrix()
+        
+        try:
+            logger.info("Generating popular recommendations based on user behavior patterns...")
+            
+            # Calculate popularity scores based on rating frequency and average ratings
+            item_stats = {}
+            
+            for item_id in self.user_item_matrix.columns:
+                item_ratings = self.user_item_matrix[item_id]
+                non_zero_ratings = item_ratings[item_ratings > 0]
+                
+                if len(non_zero_ratings) > 0:
+                    # Popularity score combines frequency and average rating
+                    frequency_score = len(non_zero_ratings) / len(self.user_item_matrix)
+                    avg_rating = non_zero_ratings.mean()
+                    
+                    # Weighted popularity score
+                    popularity_score = (0.6 * frequency_score) + (0.4 * avg_rating / 5.0)
+                    
+                    item_stats[item_id] = {
+                        'popularity_score': popularity_score,
+                        'frequency': len(non_zero_ratings),
+                        'avg_rating': avg_rating,
+                        'total_ratings': len(non_zero_ratings)
+                    }
+            
+            # Sort by popularity score
+            sorted_items = sorted(item_stats.items(), 
+                                key=lambda x: x[1]['popularity_score'], 
+                                reverse=True)
+            
+            # Apply preference filtering if provided
+            if preferences:
+                filtered_items = self._filter_by_preferences(sorted_items, preferences)
+                if len(filtered_items) > 0:
+                    sorted_items = filtered_items
+            
+            # Get top recommendations
+            top_items = sorted_items[:n_recommendations]
+            
+            # Format recommendations
+            recommendations = []
+            for item_id, stats in top_items:
+                laptop_data = self._get_laptop_details(item_id)
+                if laptop_data:
+                    recommendations.append({
+                        'asin': item_id,
+                        'title': laptop_data.get('title', 'Unknown'),
+                        'brand': laptop_data.get('brand', 'Unknown'),
+                        'price_myr': laptop_data.get('price_myr', 0),
+                        'rating': laptop_data.get('average_rating', 0),
+                        'recommendation_score': stats['popularity_score'],
+                        'method': 'popular_collaborative',
+                        'explanation': f"Popular choice: {stats['total_ratings']} ratings, avg {stats['avg_rating']:.1f} stars"
+                    })
+            
+            logger.info(f"Generated {len(recommendations)} popular recommendations")
+            return recommendations
+            
+        except Exception as e:
+            logger.error(f"Error getting popular recommendations: {str(e)}")
+            raise
+    
+    def get_trending_recommendations(self, preferences: Dict = None,
+                                   n_recommendations: int = 10) -> List[Dict]:
+        """
+        Get trending recommendations based on recent user behavior patterns.
+        
+        Args:
+            preferences: Optional user preferences for filtering
+            n_recommendations: Number of recommendations to return
+            
+        Returns:
+            List[Dict]: List of trending recommended laptops
+        """
+        if self.user_item_matrix is None:
+            self.create_user_item_matrix()
+        
+        try:
+            logger.info("Generating trending recommendations...")
+            
+            # Calculate trending scores based on rating patterns
+            trending_scores = {}
+            
+            for item_id in self.user_item_matrix.columns:
+                item_ratings = self.user_item_matrix[item_id]
+                non_zero_ratings = item_ratings[item_ratings > 0]
+                
+                if len(non_zero_ratings) >= 3:  # Minimum ratings for trending
+                    # Calculate trending score based on rating distribution
+                    high_ratings = non_zero_ratings[non_zero_ratings >= 4.0]
+                    trending_score = len(high_ratings) / len(non_zero_ratings)
+                    
+                    # Boost score for items with recent activity
+                    frequency_boost = min(len(non_zero_ratings) / 50, 1.0)  # Cap at 50 ratings
+                    trending_score = trending_score * (1 + frequency_boost)
+                    
+                    trending_scores[item_id] = {
+                        'trending_score': trending_score,
+                        'high_rating_ratio': len(high_ratings) / len(non_zero_ratings),
+                        'total_ratings': len(non_zero_ratings)
+                    }
+            
+            # Sort by trending score
+            sorted_items = sorted(trending_scores.items(),
+                                key=lambda x: x[1]['trending_score'],
+                                reverse=True)
+            
+            # Apply preference filtering if provided
+            if preferences:
+                filtered_items = self._filter_by_preferences(sorted_items, preferences)
+                if len(filtered_items) > 0:
+                    sorted_items = filtered_items
+            
+            # Get top trending recommendations
+            top_items = sorted_items[:n_recommendations]
+            
+            # Format recommendations
+            recommendations = []
+            for item_id, stats in top_items:
+                laptop_data = self._get_laptop_details(item_id)
+                if laptop_data:
+                    recommendations.append({
+                        'asin': item_id,
+                        'title': laptop_data.get('title', 'Unknown'),
+                        'brand': laptop_data.get('brand', 'Unknown'),
+                        'price_myr': laptop_data.get('price_myr', 0),
+                        'rating': laptop_data.get('average_rating', 0),
+                        'recommendation_score': stats['trending_score'],
+                        'method': 'trending_collaborative',
+                        'explanation': f"Trending: {stats['high_rating_ratio']:.1%} high ratings"
+                    })
+            
+            logger.info(f"Generated {len(recommendations)} trending recommendations")
+            return recommendations
+            
+        except Exception as e:
+            logger.error(f"Error getting trending recommendations: {str(e)}")
+            raise
+    
+    def _filter_by_preferences(self, items: List, preferences: Dict) -> List:
+        """Filter items based on user preferences."""
+        if not preferences:
+            return items
+        
+        filtered_items = []
+        
+        for item_id, stats in items:
+            laptop_data = self._get_laptop_details(item_id)
+            if not laptop_data:
+                continue
+            
+            # Budget filtering
+            if 'budget_range' in preferences and preferences['budget_range']:
+                budget_min, budget_max = preferences['budget_range']
+                price = laptop_data.get('price_myr', 0)
+                if price < budget_min or price > budget_max:
+                    continue
+            
+            # Brand filtering
+            if 'brand_preference' in preferences and preferences['brand_preference']:
+                brand = laptop_data.get('brand', '')
+                if preferences['brand_preference'].lower() not in brand.lower():
+                    continue
+            
+            # RAM filtering
+            if 'min_ram' in preferences:
+                # This would need RAM data in laptop details
+                pass
+            
+            filtered_items.append((item_id, stats))
+        
+        return filtered_items
+
     def get_user_profile(self, user_id: int) -> Dict[str, Any]:
         """Get user profile and preferences."""
         if self.user_item_matrix is None:

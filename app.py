@@ -290,6 +290,53 @@ def extract_video_titles(videos_data):
     
     return []
 
+def normalize_recommendations(recommendations: List[Dict]) -> List[Dict]:
+    """Normalize recommendation dicts to what templates expect."""
+    global df_laptop
+    normalized: List[Dict] = []
+    for rec in recommendations:
+        r = dict(rec)
+        # Title
+        if 'title_y' not in r and 'title' in r:
+            r['title_y'] = r['title']
+        # Rating
+        if 'average_rating' not in r and 'rating' in r:
+            r['average_rating'] = r['rating']
+        if 'average_rating' not in r:
+            r['average_rating'] = 0.0
+        # Brand
+        if 'brand' not in r and 'brand_encoded' in r:
+            r['brand'] = f"Brand_{r['brand_encoded']}"
+        if 'brand' not in r:
+            r['brand'] = 'Unknown Brand'
+        # Price
+        if 'price_myr' not in r:
+            r['price_myr'] = 0.0
+        # Ensure laptop_id (via asin lookup)
+        if 'laptop_id' not in r:
+            asin = r.get('asin')
+            if asin is not None and df_laptop is not None and 'asin' in df_laptop.columns and 'laptop_id' in df_laptop.columns:
+                match = df_laptop[df_laptop['asin'] == asin]
+                if not match.empty:
+                    r['laptop_id'] = match.iloc[0]['laptop_id']
+        # Media extraction (if not already present)
+        if 'images' not in r:
+            images_y = r.get('images_y')
+            if images_y is None and r.get('asin') and df_laptop is not None:
+                match = df_laptop[df_laptop['asin'] == r['asin']]
+                if not match.empty and 'images_y' in match.columns:
+                    images_y = match.iloc[0].get('images_y')
+            r['images'] = extract_image_urls(images_y)
+        if 'videos' not in r:
+            videos = r.get('videos')
+            if videos is None and r.get('asin') and df_laptop is not None:
+                match = df_laptop[df_laptop['asin'] == r['asin']]
+                if not match.empty and 'videos' in match.columns:
+                    videos = match.iloc[0].get('videos')
+            r['videos'] = extract_video_urls(videos, r.get('title_y'), r.get('brand'))
+        normalized.append(r)
+    return normalized
+
 @app.route('/')
 def index():
     """Main landing page with system overview and quick start options."""
@@ -311,12 +358,52 @@ def recommend():
             'priority': request.form.get('priority', 'performance')
         }
         
+        # Algorithm selection
+        algorithm = request.form.get('algorithm', 'content_based')
+
         # Store preferences in session
         session['user_preferences'] = preferences
+        session['algorithm'] = algorithm
         
         # Get recommendations
         try:
-            recommendations = get_recommendations(preferences)
+            if algorithm == 'content_based':
+                recommendations = get_recommendations(preferences)
+                recommendations = normalize_recommendations(recommendations)
+            elif algorithm == 'collaborative':
+                # Convert preferences to system format for collaborative filtering
+                query = {
+                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
+                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
+                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+                    'min_ram': preferences['ram_min'],
+                    'min_storage': preferences['storage_min'],
+                    'use_case': preferences['use_case'],
+                    'priority': preferences['priority']
+                }
+                # Use automatic popular recommendations (no user_id required)
+                recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
+                    preferences=query, n_recommendations=10
+                )
+                recommendations = normalize_recommendations(recommendations)
+            elif algorithm == 'hybrid':
+                # Convert preferences to system format for hybrid
+                query = {
+                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
+                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
+                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+                    'min_ram': preferences['ram_min'],
+                    'min_storage': preferences['storage_min'],
+                    'use_case': preferences['use_case'],
+                    'priority': preferences['priority']
+                }
+                # Use automatic hybrid recommendations (no user_id required)
+                recommendations = recommender_system.get_hybrid_recommendations_auto(
+                    preferences=query, n_recommendations=10
+                )
+                recommendations = normalize_recommendations(recommendations)
+            else:
+                raise Exception(f'Unsupported algorithm: {algorithm}')
             return render_template('recommendations.html', 
                                  recommendations=recommendations,
                                  preferences=preferences)
@@ -324,7 +411,16 @@ def recommend():
             flash(f'Error getting recommendations: {str(e)}', 'error')
             return render_template('recommend.html', error=str(e))
     
-    return render_template('recommend.html')
+    # For GET request, provide available brands for the form
+    available_brands = []
+    if recommender_system and recommender_system.content_based_filter:
+        try:
+            available_brands = recommender_system.content_based_filter.get_available_brands()
+        except Exception as e:
+            logger.warning(f"Could not get available brands: {str(e)}")
+            available_brands = []
+    
+    return render_template('recommend.html', available_brands=available_brands)
 
 @app.route('/api/recommend', methods=['POST'])
 def api_recommend():
