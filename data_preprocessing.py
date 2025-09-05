@@ -37,6 +37,17 @@ class LaptopDataPreprocessor:
         self.df_rating = None
         self.scalers = {}
         self.label_encoders = {}
+        self.brand_mapping = {
+            "Brand_8": "Dell",
+            "Brand_30": "Acer",
+            "Brand_9": "HP",
+            "Brand_7": "Lenovo",
+            "Brand_10": "Apple",
+            "Brand_11": "Asus",
+            "Brand_12": "MSI",
+            "Brand_13": "Samsung",
+            # Add any other brand mappings here
+        }
         
     def load_data(self) -> pd.DataFrame:
         """
@@ -116,6 +127,14 @@ class LaptopDataPreprocessor:
         else:
             logger.warning("No media columns (images_y, videos) found in dataset")
         
+        # Keep original brand names for display (before encoding)
+        if 'brand' in df.columns:
+            df['brand_original'] = df['brand']
+        
+        # Apply brand mapping before creating separate dataframes
+        if 'brand' in df.columns:
+            df['brand'] = df['brand'].map(self.brand_mapping).fillna(df['brand'])
+        
         # Create separate dataframes
         # Use title_y for deduplication since same products can have different ASINs
         df_laptop = df[available_laptop_cols].drop_duplicates(subset=['title_y']).reset_index(drop=True)
@@ -123,6 +142,12 @@ class LaptopDataPreprocessor:
         
         # Add laptop_id as primary key (simple integer index)
         df_laptop['laptop_id'] = range(len(df_laptop))
+        
+        # Add brand_original column if it exists in the original data
+        if 'brand_original' in df.columns:
+            # Map brand_original back to laptop dataframe using asin
+            brand_mapping = df[['asin', 'brand_original']].drop_duplicates(subset=['asin'])
+            df_laptop = df_laptop.merge(brand_mapping, on='asin', how='left')
         
         # Create mapping from asin to laptop_id for rating dataframe
         asin_to_laptop_id = df_laptop.set_index('asin')['laptop_id'].to_dict()
@@ -208,6 +233,10 @@ class LaptopDataPreprocessor:
                 df_normalized[f'{col}_encoded'] = le.fit_transform(df_normalized[col].fillna('Unknown'))
                 self.label_encoders[f'laptop_{col}'] = le
         
+        # Preserve brand_original column if it exists
+        if 'brand_original' in df_normalized.columns:
+            logger.info("Preserving brand_original column for display")
+        
         # 3. Clean and normalize text columns
         text_columns = ['title_y', 'features']
         for col in text_columns:
@@ -220,11 +249,16 @@ class LaptopDataPreprocessor:
         clean_columns = [col for col in df_normalized.columns if col.endswith('_clean')]
         numerical_columns = ['average_rating', 'rating_number']
         
+        # Add brand_original if it exists
+        if 'brand_original' in df_normalized.columns:
+            essential_columns.append('brand_original')
+        
         # Add specification columns
         specification_columns = [col for col in df_normalized.columns if any(x in col for x in [
             'ram_gb', 'storage_gb', 'screen_size_inches', 'storage_type', 'ram_type', 
             'processor_model', 'gpu_model', 'storage_category', 'ram_category', 'screen_category',
-            'storage_display'
+            'storage_display', 'cpu_benchmark_score', 'gpu_benchmark_score', 'total_benchmark_score',
+            'performance_tier', 'gaming_capability'
         ])]
         
         # Add media columns (images and videos)
@@ -889,13 +923,128 @@ class LaptopDataPreprocessor:
         
         return available_features
 
-    def preprocess_separated_pipeline(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def save_cached_data(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
+                        cache_dir: str = "data/cache") -> None:
+        """
+        Save preprocessed data to cache files for faster loading.
+        
+        Args:
+            df_laptop: Processed laptop dataframe
+            df_rating: Processed rating dataframe
+            cache_dir: Directory to save cache files
+        """
+        try:
+            # Create cache directory if it doesn't exist
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Save dataframes as parquet files (more efficient than CSV)
+            laptop_cache_path = os.path.join(cache_dir, "laptop_data.parquet")
+            rating_cache_path = os.path.join(cache_dir, "rating_data.parquet")
+            metadata_path = os.path.join(cache_dir, "cache_metadata.json")
+            
+            # Save dataframes
+            df_laptop.to_parquet(laptop_cache_path, index=False)
+            df_rating.to_parquet(rating_cache_path, index=False)
+            
+            # Save metadata with timestamp
+            metadata = {
+                "created_at": datetime.now().isoformat(),
+                "laptop_records": len(df_laptop),
+                "rating_records": len(df_rating),
+                "laptop_columns": list(df_laptop.columns),
+                "rating_columns": list(df_rating.columns),
+                "version": "1.0"
+            }
+            
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            logger.info(f"Cached data saved to {cache_dir}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save cached data: {e}")
+    
+    def load_cached_data(self, cache_dir: str = "data/cache", 
+                        max_age_hours: int = 24) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
+        """
+        Load preprocessed data from cache files if they exist and are fresh.
+        
+        Args:
+            cache_dir: Directory containing cache files
+            max_age_hours: Maximum age of cache in hours before considering stale
+            
+        Returns:
+            Tuple of (df_laptop, df_rating) if cache is valid, None otherwise
+        """
+        try:
+            laptop_cache_path = os.path.join(cache_dir, "laptop_data.parquet")
+            rating_cache_path = os.path.join(cache_dir, "rating_data.parquet")
+            metadata_path = os.path.join(cache_dir, "cache_metadata.json")
+            
+            # Check if all cache files exist
+            if not all(os.path.exists(path) for path in [laptop_cache_path, rating_cache_path, metadata_path]):
+                logger.info("Cache files not found, will need to preprocess")
+                return None
+            
+            # Check cache age
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            
+            created_at = datetime.fromisoformat(metadata['created_at'])
+            age_hours = (datetime.now() - created_at).total_seconds() / 3600
+            
+            if age_hours > max_age_hours:
+                logger.info(f"Cache is {age_hours:.1f} hours old (max: {max_age_hours}), will reprocess")
+                return None
+            
+            # Load cached data
+            df_laptop = pd.read_parquet(laptop_cache_path)
+            df_rating = pd.read_parquet(rating_cache_path)
+            
+            # Set the data in the preprocessor
+            self.df_laptop = df_laptop
+            self.df_rating = df_rating
+            
+            logger.info(f"Loaded cached data: {len(df_laptop)} laptops, {len(df_rating)} ratings")
+            return df_laptop, df_rating
+            
+        except Exception as e:
+            logger.warning(f"Failed to load cached data: {e}")
+            return None
+    
+    def clear_cache(self, cache_dir: str = "data/cache") -> None:
+        """
+        Clear all cached data files.
+        
+        Args:
+            cache_dir: Directory containing cache files
+        """
+        try:
+            import shutil
+            if os.path.exists(cache_dir):
+                shutil.rmtree(cache_dir)
+                logger.info(f"Cache cleared: {cache_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to clear cache: {e}")
+
+    def preprocess_separated_pipeline(self, force_reprocess: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Run the complete preprocessing pipeline with separated dataframes.
+        Checks for cached data first to avoid reprocessing.
         
+        Args:
+            force_reprocess: If True, force reprocessing even if cached data exists
+            
         Returns:
             Tuple[pd.DataFrame, pd.DataFrame]: (df_laptop, df_rating)
         """
+        # Check for cached data first
+        if not force_reprocess:
+            cached_data = self.load_cached_data()
+            if cached_data is not None:
+                logger.info("Using cached preprocessed data")
+                return cached_data
+        
         logger.info("Starting separated preprocessing pipeline...")
         
         # Step 1: Load data
@@ -920,6 +1069,9 @@ class LaptopDataPreprocessor:
         self.df_laptop = df_laptop_normalized
         self.df_rating = df_rating_normalized
         
+        # Save processed data to cache
+        self.save_cached_data(df_laptop_normalized, df_rating_normalized)
+        
         logger.info("Separated preprocessing pipeline completed successfully")
         
         return df_laptop_normalized, df_rating_normalized
@@ -940,10 +1092,12 @@ class LaptopDataPreprocessor:
             logger.info("Initializing benchmark scraper for specification extraction...")
             scraper = BenchmarkScraper()
             
-            # Extract specifications from text columns
-            df_with_specs = scraper.add_specifications_from_columns(df_laptop)
+            # Extract specifications and benchmark scores in one step
+            # Note: This can take several minutes for large datasets
+            logger.info("Starting benchmark score extraction (this may take 2-5 minutes)...")
+            df_with_specs = scraper.add_benchmark_scores(df_laptop)
             
-            logger.info("Specifications extracted successfully using benchmark scraper")
+            logger.info("Specifications and benchmark scores extracted successfully using benchmark scraper")
             return df_with_specs
             
         except ImportError as e:
@@ -952,6 +1106,10 @@ class LaptopDataPreprocessor:
             return self._add_basic_specifications(df_laptop)
         except Exception as e:
             logger.error(f"Error in benchmark scraper specification extraction: {e}")
+            logger.info("Falling back to basic specification extraction...")
+            return self._add_basic_specifications(df_laptop)
+        except KeyboardInterrupt:
+            logger.warning("Benchmark processing interrupted by user")
             logger.info("Falling back to basic specification extraction...")
             return self._add_basic_specifications(df_laptop)
     

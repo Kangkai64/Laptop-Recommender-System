@@ -89,6 +89,13 @@ class ContentBasedFiltering:
                 'max_price_difference': 0.5,
                 'brand_diversity': True,
                 'price_range_coverage': True
+            },
+            'similarity_improvements': {
+                'enable_price_penalty': True,
+                'enable_diversity_bonus': True,
+                'log_scaling_power': 1.2,
+                'similarity_range_min': 0.2,
+                'similarity_range_max': 0.9
             }
         }
         
@@ -158,11 +165,36 @@ class ContentBasedFiltering:
                 text_vectors = np.zeros((len(self.df_laptop), 1))
                 self.tfidf_vectorizer = None
             
-            # Get available numerical features
+            # Get available numerical features (technical specifications only)
             numerical_features_list = []
             numerical_feature_names = []
             
+            # Technical specifications for similarity calculation
+            spec_columns = ['ram_gb', 'storage_gb', 'screen_size_inches', 'cpu_benchmark_score', 'gpu_benchmark_score', 'total_benchmark_score']
+            for col in spec_columns:
+                if col in self.df_laptop.columns:
+                    # Apply logarithmic scaling for better differentiation
+                    if col in ['ram_gb', 'storage_gb', 'cpu_benchmark_score', 'gpu_benchmark_score', 'total_benchmark_score']:
+                        # Use log scaling for these features to reduce dominance of high values
+                        values = self.df_laptop[col].fillna(0)
+                        # Add 1 to avoid log(0) and use log10 for better scaling
+                        log_values = np.log10(values + 1)
+                        numerical_features_list.append(log_values)
+                        numerical_feature_names.append(f'{col}_log')
+                    else:
+                        numerical_features_list.append(self.df_laptop[col].fillna(0))
+                        numerical_feature_names.append(col)
+            
+            # Add price as a differentiating feature (but with lower weight)
             if 'price_myr' in self.df_laptop.columns:
+                # Use log scaling for price to reduce extreme value dominance
+                price_values = self.df_laptop['price_myr'].fillna(0)
+                log_price = np.log10(price_values + 1)
+                numerical_features_list.append(log_price)
+                numerical_feature_names.append('price_log')
+            
+            # Note: Removed average_rating from similarity calculation
+            # as it can lead to incorrect similarity scores based on user preferences
                 # Add price with some noise to increase diversity
                 price_data = self.df_laptop['price_myr'].fillna(0)
                 numerical_features_list.append(price_data)
@@ -196,19 +228,22 @@ class ContentBasedFiltering:
             categorical_features_list = []
             categorical_feature_names = []
             
-            # Handle brand encoding specially - create one-hot encoded features
-            if 'brand_encoded' in self.df_laptop.columns:
-                brand_encoded = self.df_laptop['brand_encoded'].fillna(0)
-                unique_brands = brand_encoded.unique()
-                
-                # Create one-hot encoded features for each brand
-                for brand_val in unique_brands:
-                    if brand_val != 0:  # Skip unknown/empty brands
-                        brand_feature = (brand_encoded == brand_val).astype(int)
-                        categorical_features_list.append(brand_feature)
-                        categorical_feature_names.append(f'brand_{int(brand_val)}')
-                
-                logger.info(f"Created {len(unique_brands)-1} brand features")
+            # Basic categorical features
+            basic_categorical = ['brand_encoded', 'os_encoded', 'color_encoded', 'store_encoded']
+            for col in basic_categorical:
+                # Handle brand encoding specially - create one-hot encoded features
+                if 'brand_encoded' in self.df_laptop.columns:
+                    brand_encoded = self.df_laptop['brand_encoded'].fillna(0)
+                    unique_brands = brand_encoded.unique()
+                    
+                    # Create one-hot encoded features for each brand
+                    for brand_val in unique_brands:
+                        if brand_val != 0:  # Skip unknown/empty brands
+                            brand_feature = (brand_encoded == brand_val).astype(int)
+                            categorical_features_list.append(brand_feature)
+                            categorical_feature_names.append(f'brand_{int(brand_val)}')
+                    
+                    logger.info(f"Created {len(unique_brands)-1} brand features")
             
             # Handle other categorical features normally
             for col in ['os_encoded', 'color_encoded', 'store_encoded']:
@@ -216,11 +251,41 @@ class ContentBasedFiltering:
                     categorical_features_list.append(self.df_laptop[col].fillna(0))
                     categorical_feature_names.append(col.replace('_encoded', ''))
             
+            # Technical specification categorical features
+            spec_categorical = ['storage_type', 'ram_type', 'processor_model', 'gpu_model']
+            for col in spec_categorical:
+                if col in self.df_laptop.columns:
+                    # Encode these categorical features if not already encoded
+                    if f'{col}_encoded' not in self.df_laptop.columns:
+                        from sklearn.preprocessing import LabelEncoder
+                        le = LabelEncoder()
+                        self.df_laptop[f'{col}_encoded'] = le.fit_transform(self.df_laptop[col].fillna('Unknown'))
+                    
+                    categorical_features_list.append(self.df_laptop[f'{col}_encoded'].fillna(0))
+                    categorical_feature_names.append(col)
+            
+            # Add performance tier and gaming capability as important differentiating features
+            performance_features = ['performance_tier', 'gaming_capability']
+            for col in performance_features:
+                if col in self.df_laptop.columns:
+                    # Encode these categorical features if not already encoded
+                    if f'{col}_encoded' not in self.df_laptop.columns:
+                        from sklearn.preprocessing import LabelEncoder
+                        le = LabelEncoder()
+                        self.df_laptop[f'{col}_encoded'] = le.fit_transform(self.df_laptop[col].fillna('Unknown'))
+                    
+                    categorical_features_list.append(self.df_laptop[f'{col}_encoded'].fillna(0))
+                    categorical_feature_names.append(col)
+            
             # Combine all features
             feature_arrays = []
             
             if text_vectors is not None and text_vectors.shape[1] > 0:
-                feature_arrays.append(text_vectors.toarray())
+                # Handle both sparse matrices and numpy arrays
+                if hasattr(text_vectors, 'toarray'):
+                    feature_arrays.append(text_vectors.toarray())
+                else:
+                    feature_arrays.append(text_vectors)
             
             if numerical_scaled.shape[1] > 0:
                 feature_arrays.append(numerical_scaled)
@@ -254,13 +319,13 @@ class ContentBasedFiltering:
     
     def compute_similarity_matrix(self, method: str = 'cosine') -> np.ndarray:
         """
-        Compute similarity matrix between all laptops.
+        Compute similarity matrix between all laptops with improved scoring.
         
         Args:
             method: Similarity method ('cosine' or 'euclidean')
             
         Returns:
-            np.ndarray: Similarity matrix
+            np.ndarray: Similarity matrix with more realistic scores
         """
         if self.feature_matrix is None:
             self.create_feature_matrix()
@@ -269,6 +334,12 @@ class ContentBasedFiltering:
         
         try:
             if method == 'cosine':
+                # Compute base cosine similarity
+                base_similarity = cosine_similarity(self.feature_matrix)
+                
+                # Apply feature weighting and scaling for more realistic scores
+                self.similarity_matrix = self._apply_similarity_improvements(base_similarity)
+                
                 # Use cosine similarity but apply additional normalization
                 raw_similarities = cosine_similarity(self.feature_matrix)
                 
@@ -293,6 +364,9 @@ class ContentBasedFiltering:
                 
             elif method == 'euclidean':
                 distances = euclidean_distances(self.feature_matrix)
+                # Convert distances to similarities (1 / (1 + distance))
+                base_similarity = 1 / (1 + distances)
+                self.similarity_matrix = self._apply_similarity_improvements(base_similarity)
                 # Convert distances to similarities with better scaling
                 max_distance = np.max(distances)
                 self.similarity_matrix = 1 / (1 + distances / max_distance)
@@ -300,6 +374,7 @@ class ContentBasedFiltering:
                 raise ValueError(f"Unsupported similarity method: {method}")
             
             logger.info(f"Similarity matrix computed with shape: {self.similarity_matrix.shape}")
+            logger.info(f"Similarity score range: {self.similarity_matrix.min():.3f} - {self.similarity_matrix.max():.3f}")
             logger.info(f"Similarity range: {np.min(self.similarity_matrix):.3f} - {np.max(self.similarity_matrix):.3f}")
             return self.similarity_matrix
             
@@ -307,8 +382,241 @@ class ContentBasedFiltering:
             logger.error(f"Error computing similarity matrix: {str(e)}")
             raise
     
+    def compute_specification_similarity_matrix(self) -> np.ndarray:
+        """
+        Compute similarity matrix focused on technical specifications and benchmarks.
+        This method gives higher weight to performance-related features.
+        
+        Returns:
+            np.ndarray: Specification-focused similarity matrix
+        """
+        logger.info("Computing specification-focused similarity matrix...")
+        
+        try:
+            # Create a specification-focused feature matrix
+            spec_features_list = []
+            spec_feature_names = []
+            
+            # High-priority specification features with weights
+            spec_weights = {
+                'cpu_benchmark_score': 0.25,
+                'gpu_benchmark_score': 0.25,
+                'total_benchmark_score': 0.20,
+                'ram_gb': 0.15,
+                'storage_gb': 0.10,
+                'screen_size_inches': 0.05
+            }
+            
+            # Add weighted specification features
+            for col, weight in spec_weights.items():
+                if col in self.df_laptop.columns:
+                    values = self.df_laptop[col].fillna(0)
+                    # Apply log scaling for better differentiation
+                    if col in ['ram_gb', 'storage_gb', 'cpu_benchmark_score', 'gpu_benchmark_score', 'total_benchmark_score']:
+                        log_values = np.log10(values + 1)
+                        weighted_values = log_values * weight
+                    else:
+                        weighted_values = values * weight
+                    
+                    spec_features_list.append(weighted_values)
+                    spec_feature_names.append(f'{col}_weighted')
+            
+            # Add processor and GPU model similarity (categorical)
+            if 'processor_model' in self.df_laptop.columns:
+                processor_encoded = pd.get_dummies(self.df_laptop['processor_model'].fillna('Unknown'))
+                spec_features_list.append(processor_encoded.values * 0.15)  # 15% weight for processor model
+                spec_feature_names.extend([f'processor_{col}' for col in processor_encoded.columns])
+            
+            if 'gpu_model' in self.df_laptop.columns:
+                gpu_encoded = pd.get_dummies(self.df_laptop['gpu_model'].fillna('Unknown'))
+                spec_features_list.append(gpu_encoded.values * 0.15)  # 15% weight for GPU model
+                spec_feature_names.extend([f'gpu_{col}' for col in gpu_encoded.columns])
+            
+            # Combine all specification features
+            if spec_features_list:
+                spec_matrix = np.column_stack(spec_features_list)
+                
+                # Normalize the specification matrix
+                from sklearn.preprocessing import StandardScaler
+                scaler = StandardScaler()
+                spec_matrix_normalized = scaler.fit_transform(spec_matrix)
+                
+                # Compute cosine similarity for specifications
+                spec_similarity = cosine_similarity(spec_matrix_normalized)
+                
+                # Apply additional weighting for benchmark scores
+                if 'cpu_benchmark_score' in self.df_laptop.columns and 'gpu_benchmark_score' in self.df_laptop.columns:
+                    # Boost similarity for laptops with similar benchmark performance
+                    cpu_scores = self.df_laptop['cpu_benchmark_score'].fillna(0).values
+                    gpu_scores = self.df_laptop['gpu_benchmark_score'].fillna(0).values
+                    
+                    # Create benchmark similarity boost
+                    cpu_similarity = 1 - np.abs(cpu_scores[:, np.newaxis] - cpu_scores[np.newaxis, :]) / (cpu_scores.max() + 1)
+                    gpu_similarity = 1 - np.abs(gpu_scores[:, np.newaxis] - gpu_scores[np.newaxis, :]) / (gpu_scores.max() + 1)
+                    
+                    # Combine with base similarity (85% base, 7.5% CPU, 7.5% GPU) - reduced boost
+                    spec_similarity = 0.85 * spec_similarity + 0.075 * cpu_similarity + 0.075 * gpu_similarity
+                
+                # Apply similarity improvements (including price penalty)
+                spec_similarity = self._apply_similarity_improvements(spec_similarity)
+                
+                logger.info(f"Specification similarity matrix computed with shape: {spec_similarity.shape}")
+                logger.info(f"Specification similarity range: {spec_similarity.min():.3f} - {spec_similarity.max():.3f}")
+                
+                return spec_similarity
+            else:
+                logger.warning("No specification features available, falling back to standard similarity")
+                return self.compute_similarity_matrix()
+                
+        except Exception as e:
+            logger.error(f"Error computing specification similarity matrix: {str(e)}")
+            # Fall back to standard similarity
+            return self.compute_similarity_matrix()
+    
+    def _apply_similarity_improvements(self, base_similarity: np.ndarray) -> np.ndarray:
+        """
+        Apply improvements to similarity scores for more realistic distribution.
+        
+        Args:
+            base_similarity: Base similarity matrix
+            
+        Returns:
+            np.ndarray: Improved similarity matrix with more realistic scores
+        """
+        try:
+            # Create a copy to avoid modifying the original
+            improved_similarity = base_similarity.copy()
+            
+            # 1. Apply logarithmic scaling to reduce high similarity scores
+            # This helps differentiate between very similar items
+            log_power = self.config['similarity_improvements']['log_scaling_power']
+            improved_similarity = np.power(improved_similarity, log_power)
+            
+            # 2. Add price-based penalty for better discrimination
+            if (self.config['similarity_improvements']['enable_price_penalty'] and 
+                'price_myr' in self.df_laptop.columns):
+                price_penalty = self._compute_price_penalty()
+                improved_similarity = improved_similarity * price_penalty
+            
+            # 3. Apply feature diversity bonus
+            if self.config['similarity_improvements']['enable_diversity_bonus']:
+                diversity_bonus = self._compute_diversity_bonus()
+                improved_similarity = improved_similarity * diversity_bonus
+            
+            # 4. Ensure diagonal elements are 1.0 (perfect self-similarity)
+            np.fill_diagonal(improved_similarity, 1.0)
+            
+            # 5. Apply gentle scaling to ensure reasonable range without over-compression
+            min_score = improved_similarity.min()
+            max_score = improved_similarity.max()
+            
+            # Only scale if the range is too narrow or too wide
+            if max_score - min_score < 0.1:  # Too narrow
+                # Expand the range slightly
+                improved_similarity = 0.3 + (improved_similarity - min_score) / (max_score - min_score + 1e-8) * 0.6
+            elif max_score - min_score > 0.8:  # Too wide
+                # Compress the range slightly
+                improved_similarity = 0.2 + (improved_similarity - min_score) / (max_score - min_score) * 0.7
+            
+            # Ensure diagonal elements are still 1.0 after scaling
+            np.fill_diagonal(improved_similarity, 1.0)
+            
+            # Handle any NaN values that might have been created
+            improved_similarity = np.nan_to_num(improved_similarity, nan=0.5, posinf=1.0, neginf=0.0)
+            
+            # Ensure diagonal elements are still 1.0 after NaN handling
+            np.fill_diagonal(improved_similarity, 1.0)
+            
+            logger.info(f"Applied similarity improvements - new range: {improved_similarity.min():.3f} - {improved_similarity.max():.3f}")
+            return improved_similarity
+            
+        except Exception as e:
+            logger.error(f"Error applying similarity improvements: {str(e)}")
+            # Return original similarity if improvements fail
+            return base_similarity
+    
+    def _compute_price_penalty(self) -> np.ndarray:
+        """
+        Compute price-based penalty matrix to reduce similarity for laptops with large price differences.
+        
+        Returns:
+            np.ndarray: Price penalty matrix
+        """
+        try:
+            prices = self.df_laptop['price_myr'].fillna(0).values
+            
+            # Create price difference matrix
+            price_diff = np.abs(prices[:, np.newaxis] - prices[np.newaxis, :])
+            
+            # Normalize price differences (assuming max price difference of 10000)
+            max_price_diff = 10000
+            normalized_diff = np.minimum(price_diff / max_price_diff, 1.0)
+            
+            # Convert to penalty (higher price difference = lower similarity)
+            # Penalty ranges from 1.0 (same price) to 0.5 (very different prices)
+            penalty = 1.0 - (normalized_diff * 0.5)
+            
+            # Ensure no NaN or invalid values
+            penalty = np.nan_to_num(penalty, nan=1.0, posinf=1.0, neginf=0.5)
+            
+            return penalty
+            
+        except Exception as e:
+            logger.warning(f"Error computing price penalty: {str(e)}")
+            # Return neutral penalty if computation fails
+            return np.ones((len(self.df_laptop), len(self.df_laptop)))
+    
+    def _compute_diversity_bonus(self) -> np.ndarray:
+        """
+        Compute diversity bonus to reward laptops with different feature combinations.
+        
+        Returns:
+            np.ndarray: Diversity bonus matrix
+        """
+        try:
+            # Get key differentiating features
+            diversity_features = []
+            
+            # Add brand diversity
+            if 'brand_encoded' in self.df_laptop.columns:
+                brand_diff = (self.df_laptop['brand_encoded'].values[:, np.newaxis] != 
+                             self.df_laptop['brand_encoded'].values[np.newaxis, :])
+                diversity_features.append(brand_diff.astype(float))
+            
+            # Add processor diversity
+            if 'processor_model' in self.df_laptop.columns:
+                processor_diff = (self.df_laptop['processor_model'].values[:, np.newaxis] != 
+                                 self.df_laptop['processor_model'].values[np.newaxis, :])
+                diversity_features.append(processor_diff.astype(float))
+            
+            # Add GPU diversity
+            if 'gpu_model' in self.df_laptop.columns:
+                gpu_diff = (self.df_laptop['gpu_model'].values[:, np.newaxis] != 
+                           self.df_laptop['gpu_model'].values[np.newaxis, :])
+                diversity_features.append(gpu_diff.astype(float))
+            
+            if diversity_features:
+                # Combine diversity features
+                total_diversity = np.sum(diversity_features, axis=0)
+                max_diversity = len(diversity_features)
+                
+                # Normalize and convert to bonus (0.9 to 1.1 range)
+                normalized_diversity = total_diversity / max_diversity
+                bonus = 0.9 + (normalized_diversity * 0.2)
+                
+                return bonus
+            else:
+                # Return neutral bonus if no diversity features available
+                return np.ones((len(self.df_laptop), len(self.df_laptop)))
+                
+        except Exception as e:
+            logger.warning(f"Error computing diversity bonus: {str(e)}")
+            # Return neutral bonus if computation fails
+            return np.ones((len(self.df_laptop), len(self.df_laptop)))
+    
     def get_recommendations(self, laptop_id: int, n_recommendations: int = 5,
-                          exclude_self: bool = True, min_similarity: float = 0.1) -> List[Dict]:
+                          exclude_self: bool = True, min_similarity: float = 0.1,
+                          use_spec_similarity: bool = True) -> List[Dict]:
         """
         Get top-N similar laptops for a given laptop.
         
@@ -317,12 +625,26 @@ class ContentBasedFiltering:
             n_recommendations: Number of recommendations to return
             exclude_self: Whether to exclude the source laptop
             min_similarity: Minimum similarity threshold
+            use_spec_similarity: Whether to use specification-focused similarity
             
         Returns:
             List[Dict]: List of recommended laptops with details
         """
-        if self.similarity_matrix is None:
-            self.compute_similarity_matrix()
+        # Use specification-focused similarity if requested and available
+        if use_spec_similarity:
+            try:
+                spec_similarity_matrix = self.compute_specification_similarity_matrix()
+                similarity_matrix = spec_similarity_matrix
+                logger.info("Using specification-focused similarity matrix")
+            except Exception as e:
+                logger.warning(f"Failed to compute specification similarity: {e}, falling back to standard similarity")
+                if self.similarity_matrix is None:
+                    self.compute_similarity_matrix()
+                similarity_matrix = self.similarity_matrix
+        else:
+            if self.similarity_matrix is None:
+                self.compute_similarity_matrix()
+            similarity_matrix = self.similarity_matrix
         
         try:
             # Find laptop index using laptop_id
@@ -333,7 +655,7 @@ class ContentBasedFiltering:
             laptop_idx = laptop_mask.idxmax()
             
             # Get similarity scores for this laptop
-            similarities = self.similarity_matrix[laptop_idx]
+            similarities = similarity_matrix[laptop_idx]
             
             # Get top similar laptops
             if exclude_self:
@@ -359,7 +681,7 @@ class ContentBasedFiltering:
                     'laptop_id': laptop_data['laptop_id'],
                     'asin': laptop_data['asin'],
                     'title_y': laptop_data['title_y_clean'],  # Fix: use title_y instead of title
-                    'brand': laptop_data['brand_encoded'],
+                    'brand': laptop_data.get('brand', f"Brand_{laptop_data['brand_encoded']}"),  # Use actual brand name if available
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Fix: use average_rating instead of rating
                     'similarity_score': normalized_similarity,
@@ -391,7 +713,7 @@ class ContentBasedFiltering:
             self.create_feature_matrix()
         
         try:
-            # Apply budget filtering first
+            # Apply filtering first
             filtered_df = self.df_laptop.copy()
             
             # Handle budget range filtering
@@ -403,6 +725,19 @@ class ContentBasedFiltering:
                         (filtered_df['price_myr'] <= budget_max)
                     ]
                     logger.info(f"Budget filtering applied: RM {budget_min} - RM {budget_max}, {len(filtered_df)} laptops remaining")
+            
+            # Handle brand filtering
+            if 'brand_preference' in preferences and preferences['brand_preference']:
+                brand_name = preferences['brand_preference']
+                # Check both 'brand' and 'brand_encoded' columns
+                if 'brand' in filtered_df.columns:
+                    brand_mask = filtered_df['brand'].str.lower() == brand_name.lower()
+                    filtered_df = filtered_df[brand_mask]
+                    logger.info(f"Brand filtering applied: {brand_name}, {len(filtered_df)} laptops remaining")
+                elif 'brand_encoded' in filtered_df.columns:
+                    # If only encoded brand is available, we need to find the encoded value
+                    # This is a fallback - ideally we should have the original brand names
+                    logger.warning(f"Only encoded brand available, cannot filter by brand name: {brand_name}")
             
             # If no laptops match budget, return empty list
             if len(filtered_df) == 0:
@@ -429,10 +764,11 @@ class ContentBasedFiltering:
                 normalized_similarity = similarities[idx]
                 
                 recommendations.append({
+                    'laptop_id': laptop_data['laptop_id'],  # Add laptop_id as primary key
                     'laptop_id': laptop_data.get('laptop_id'),
                     'asin': laptop_data['asin'],
                     'title_y': laptop_data['title_y_clean'],  # Changed from 'title' to 'title_y'
-                    'brand': laptop_data['brand_encoded'],
+                    'brand': laptop_data.get('brand', f"Brand_{laptop_data['brand_encoded']}"),  # Use actual brand name if available
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Changed from 'rating' to 'average_rating'
                     'similarity_score': normalized_similarity,

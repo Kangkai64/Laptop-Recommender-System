@@ -52,7 +52,7 @@ class CollaborativeFiltering:
             },
             'recommendation_options': {
                 'min_rating_threshold': 3.0,
-                'max_recommendations': 10,
+                'max_recommendations': 50,
                 'diversity_weight': 0.3
             }
         }

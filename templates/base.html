@@ -217,6 +217,50 @@
             border-color: var(--secondary-color);
             box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
         }
+        
+        /* Enhanced Specifications Styling */
+        .specs-summary .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .performance-summary .badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+        }
+        
+        .specs-summary, .performance-summary {
+            line-height: 1.8;
+        }
+        
+        /* Specification card styling */
+        .card-body h6 {
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-body .text-muted {
+            font-size: 0.9rem;
+        }
+        
+        /* Badge styling for performance indicators */
+        .badge.bg-danger {
+            background-color: #dc3545 !important;
+        }
+        
+        .badge.bg-success {
+            background-color: #28a745 !important;
+        }
+        
+        .badge.bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+        
+        .badge.bg-info {
+            background-color: #17a2b8 !important;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -391,13 +435,25 @@
             $('#compareModal').modal('show');
         }
         
-        function addToCompare(laptopId, title, brand, price, rating) {
+        function addToCompare(laptopId, title, brand, price, rating, ram, storage, processor, gpu, screenSize, storageType, os, ramType, cpuBenchmark, gpuBenchmark, performanceTier, gamingCapability) {
             const laptop = {
                 id: laptopId,
                 title: title || 'Unknown Title',
                 brand: brand || 'Unknown Brand',
                 price: price || '0.00',
-                rating: rating || '0.0'
+                rating: rating || '0.0',
+                ram: ram || 'Unknown',
+                storage: storage || 'Unknown',
+                processor: processor || 'Unknown',
+                gpu: gpu || 'Unknown',
+                screenSize: screenSize || 'Unknown',
+                storageType: storageType || 'Unknown',
+                os: os || 'Unknown',
+                ramType: ramType || 'Unknown',
+                cpuBenchmark: cpuBenchmark || 0,
+                gpuBenchmark: gpuBenchmark || 0,
+                performanceTier: performanceTier || 'Unknown',
+                gamingCapability: gamingCapability || 'Unknown'
             };
             
             if (!compareList.find(item => item.id === laptopId)) {
@@ -429,32 +485,141 @@
                 return;
             }
             
-            let html = '<div class="table-responsive"><table class="table table-bordered">';
-            html += '<thead><tr><th>Feature</th>';
+            let html = '<div class="table-responsive"><table class="table table-bordered table-striped">';
+            html += '<thead class="table-dark"><tr><th style="min-width: 150px;">Specification</th>';
             
             compareList.forEach(laptop => {
-                html += `<th>${laptop.title}</th>`;
+                // Truncate long titles for better display
+                const shortTitle = laptop.title.length > 50 ? laptop.title.substring(0, 50) + '...' : laptop.title;
+                html += `<th style="min-width: 200px;">${shortTitle}</th>`;
             });
             html += '</tr></thead><tbody>';
             
             // Brand
-            html += '<tr><td><strong>Brand</strong></td>';
+            html += '<tr><td><strong><i class="fas fa-tag me-2"></i>Brand</strong></td>';
             compareList.forEach(laptop => {
                 html += `<td>${laptop.brand}</td>`;
             });
             html += '</tr>';
             
             // Price
-            html += '<tr><td><strong>Price</strong></td>';
+            html += '<tr><td><strong><i class="fas fa-dollar-sign me-2"></i>Price</strong></td>';
             compareList.forEach(laptop => {
-                html += `<td>${laptop.price}</td>`;
+                const formattedPrice = parseFloat(laptop.price).toFixed(2);
+                html += `<td>RM ${formattedPrice}</td>`;
+            });
+            html += '</tr>';
+            
+            // Price Category
+            html += '<tr><td><strong><i class="fas fa-tags me-2"></i>Price Category</strong></td>';
+            compareList.forEach(laptop => {
+                const price = parseFloat(laptop.price);
+                let category = 'Budget';
+                if (price >= 5000) category = 'Premium';
+                else if (price >= 3000) category = 'Mid-range';
+                else if (price >= 1500) category = 'Entry-level';
+                html += `<td><span class="badge bg-info">${category}</span></td>`;
             });
             html += '</tr>';
             
             // Rating
-            html += '<tr><td><strong>Rating</strong></td>';
+            html += '<tr><td><strong><i class="fas fa-star me-2"></i>Rating</strong></td>';
             compareList.forEach(laptop => {
-                html += `<td>${laptop.rating}</td>`;
+                const rating = parseFloat(laptop.rating);
+                const stars = '★'.repeat(Math.floor(rating)) + '☆'.repeat(5 - Math.floor(rating));
+                html += `<td>${stars} (${rating.toFixed(1)})</td>`;
+            });
+            html += '</tr>';
+            
+            // RAM
+            html += '<tr><td><strong><i class="fas fa-memory me-2"></i>RAM</strong></td>';
+            compareList.forEach(laptop => {
+                const ramDisplay = laptop.ramType !== 'Unknown' ? `${laptop.ram} (${laptop.ramType})` : laptop.ram;
+                html += `<td>${ramDisplay}</td>`;
+            });
+            html += '</tr>';
+            
+            // Storage
+            html += '<tr><td><strong><i class="fas fa-hdd me-2"></i>Storage</strong></td>';
+            compareList.forEach(laptop => {
+                const storageDisplay = laptop.storageType !== 'Unknown' ? `${laptop.storage} (${laptop.storageType})` : laptop.storage;
+                html += `<td>${storageDisplay}</td>`;
+            });
+            html += '</tr>';
+            
+            // Screen Size
+            html += '<tr><td><strong><i class="fas fa-desktop me-2"></i>Screen Size</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.screenSize}"</td>`;
+            });
+            html += '</tr>';
+            
+            // Operating System
+            html += '<tr><td><strong><i class="fas fa-laptop me-2"></i>Operating System</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.os || 'Unknown'}</td>`;
+            });
+            html += '</tr>';
+            
+            // Processor
+            html += '<tr><td><strong><i class="fas fa-microchip me-2"></i>Processor</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.processor}</td>`;
+            });
+            html += '</tr>';
+            
+            // CPU Performance
+            html += '<tr><td><strong><i class="fas fa-tachometer-alt me-2"></i>CPU Performance</strong></td>';
+            compareList.forEach(laptop => {
+                const cpuScore = laptop.cpuBenchmark || 0;
+                let badgeClass = 'bg-info';
+                let label = 'Standard';
+                if (cpuScore >= 15000) { badgeClass = 'bg-success'; label = 'High Performance'; }
+                else if (cpuScore >= 10000) { badgeClass = 'bg-warning'; label = 'Good Performance'; }
+                html += `<td>${cpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Graphics
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>Graphics</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.gpu}</td>`;
+            });
+            html += '</tr>';
+            
+            // GPU Performance
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>GPU Performance</strong></td>';
+            compareList.forEach(laptop => {
+                const gpuScore = laptop.gpuBenchmark || 0;
+                let badgeClass = 'bg-info';
+                let label = 'Basic Graphics';
+                if (gpuScore >= 8000) { badgeClass = 'bg-success'; label = 'Gaming Ready'; }
+                else if (gpuScore >= 5000) { badgeClass = 'bg-warning'; label = 'Light Gaming'; }
+                html += `<td>${gpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Performance Tier
+            html += '<tr><td><strong><i class="fas fa-star me-2"></i>Performance Tier</strong></td>';
+            compareList.forEach(laptop => {
+                const tier = laptop.performanceTier || 'Unknown';
+                let badgeClass = 'bg-info';
+                if (tier === 'Ultra High') badgeClass = 'bg-danger';
+                else if (tier === 'High') badgeClass = 'bg-success';
+                else if (tier === 'Medium-High') badgeClass = 'bg-warning';
+                html += `<td><span class="badge ${badgeClass}">${tier}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Gaming Capability
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>Gaming Capability</strong></td>';
+            compareList.forEach(laptop => {
+                const gaming = laptop.gamingCapability || 'Unknown';
+                let badgeClass = 'bg-secondary';
+                if (gaming === 'High-End Gaming') badgeClass = 'bg-danger';
+                else if (gaming === 'Mid-Range Gaming') badgeClass = 'bg-warning';
+                else if (gaming === 'Casual Gaming') badgeClass = 'bg-info';
+                html += `<td><span class="badge ${badgeClass}">${gaming}</span></td>`;
             });
             html += '</tr>';
             
@@ -491,6 +656,50 @@
             setTimeout(function() {
                 $('.alert').fadeOut('slow');
             }, 5000);
+            
+            // Handle compare button clicks using data attributes
+            $(document).on('click', '.compare-btn', function() {
+                const $btn = $(this);
+                const laptopData = {
+                    id: $btn.data('asin'),
+                    title: $btn.data('title') || 'Unknown Title',
+                    brand: $btn.data('brand') || 'Unknown Brand',
+                    price: $btn.data('price') || '0.00',
+                    rating: $btn.data('rating') || '0.0',
+                    ram: $btn.data('ram') || 'Unknown',
+                    storage: $btn.data('storage') || 'Unknown',
+                    processor: $btn.data('processor') || 'Unknown',
+                    gpu: $btn.data('gpu') || 'Unknown',
+                    screenSize: $btn.data('screen') || 'Unknown',
+                    storageType: $btn.data('storage-type') || 'Unknown',
+                    os: $btn.data('os') || 'Unknown',
+                    ramType: $btn.data('ram-type') || 'Unknown',
+                    cpuBenchmark: $btn.data('cpu-benchmark') || 0,
+                    gpuBenchmark: $btn.data('gpu-benchmark') || 0,
+                    performanceTier: $btn.data('performance-tier') || 'Unknown',
+                    gamingCapability: $btn.data('gaming-capability') || 'Unknown'
+                };
+                
+                addToCompare(
+                    laptopData.id,
+                    laptopData.title,
+                    laptopData.brand,
+                    laptopData.price,
+                    laptopData.rating,
+                    laptopData.ram,
+                    laptopData.storage,
+                    laptopData.processor,
+                    laptopData.gpu,
+                    laptopData.screenSize,
+                    laptopData.storageType,
+                    laptopData.os,
+                    laptopData.ramType,
+                    laptopData.cpuBenchmark,
+                    laptopData.gpuBenchmark,
+                    laptopData.performanceTier,
+                    laptopData.gamingCapability
+                );
+            });
         });
     </script>
     

@@ -48,27 +48,45 @@ def initialize_system():
         # Initialize the main recommender system
         recommender_system = LaptopRecommenderSystem()
         
-        # Load and preprocess data
-        preprocessor = LaptopDataPreprocessor()
-        df_laptop, df_rating = preprocessor.preprocess_separated_pipeline()
+        # Load and preprocess data (this will use cached data if available)
+        df_laptop, df_rating = recommender_system.load_and_preprocess_data()
         
-        # Add original brand column back for display purposes
+        # Add original brand column back for display purposes if needed
         if 'brand_encoded' in df_laptop.columns and 'brand' not in df_laptop.columns:
-            # Get the original brand data from the preprocessor
-            original_data = preprocessor.df
-            if 'brand' in original_data.columns:
-                # Map back to laptop dataframe using asin
-                brand_mapping = original_data[['asin', 'brand']].drop_duplicates(subset=['asin'])
-                df_laptop = df_laptop.merge(brand_mapping, on='asin', how='left')
+            # Check if we have brand_original column from cache
+            if 'brand_original' in df_laptop.columns:
+                df_laptop['brand'] = df_laptop['brand_original']
+                logger.info("Using brand_original column for brand names")
+            else:
+                # Try to get original brand data from cache or create fallback
+                try:
+                    preprocessor = LaptopDataPreprocessor()
+                    cached_data = preprocessor.load_cached_data()
+                    if cached_data is not None:
+                        original_data = preprocessor.df
+                        if 'brand' in original_data.columns:
+                            # Map back to laptop dataframe using asin
+                            brand_mapping = original_data[['asin', 'brand']].drop_duplicates(subset=['asin'])
+                            df_laptop = df_laptop.merge(brand_mapping, on='asin', how='left')
+                except Exception as e:
+                    logger.warning(f"Could not restore brand column: {e}")
+                    # Create fallback brand names
+                    df_laptop['brand'] = df_laptop['brand_encoded'].apply(lambda x: f"Brand_{x}")
         
         # Add media columns back if they exist in original data
         media_columns = ['images_y', 'videos']
         for col in media_columns:
-            if col in original_data.columns and col not in df_laptop.columns:
-                # Map back to laptop dataframe using asin
-                media_mapping = original_data[['asin', col]].drop_duplicates(subset=['asin'])
-                df_laptop = df_laptop.merge(media_mapping, on='asin', how='left')
-                logger.info(f"Added back {col} column from original data")
+            if col not in df_laptop.columns:
+                try:
+                    preprocessor = LaptopDataPreprocessor()
+                    cached_data = preprocessor.load_cached_data()
+                    if cached_data is not None and hasattr(preprocessor, 'df') and col in preprocessor.df.columns:
+                        # Map back to laptop dataframe using asin
+                        media_mapping = preprocessor.df[['asin', col]].drop_duplicates(subset=['asin'])
+                        df_laptop = df_laptop.merge(media_mapping, on='asin', how='left')
+                        logger.info(f"Added back {col} column from original data")
+                except Exception as e:
+                    logger.warning(f"Could not restore {col} column: {e}")
         
         # Set the data in the recommender system
         recommender_system.df_laptop = df_laptop
@@ -178,6 +196,7 @@ def extract_image_urls(images_data):
         elif isinstance(images_data, str):
             if images_data.startswith('http') and images_data != 'null':
                 return [images_data]
+            
     except Exception as e:
         logger.warning(f"Error extracting image URLs: {e}")
     
@@ -404,6 +423,14 @@ def recommend():
                 recommendations = normalize_recommendations(recommendations)
             else:
                 raise Exception(f'Unsupported algorithm: {algorithm}')
+            recommendations = get_recommendations(preferences)
+            
+            # Add brand mapping to each laptop in recommendations
+            for laptop in recommendations:
+                if 'brand' in laptop:
+                    brand_id = laptop['brand']
+                    laptop['brand'] = recommender_system.preprocessor.brand_mapping.get(brand_id, brand_id)
+            
             return render_template('recommendations.html', 
                                  recommendations=recommendations,
                                  preferences=preferences)
@@ -448,14 +475,7 @@ def api_recommend():
         # Convert numpy types to Python types for JSON serialization
         serializable_recommendations = []
         for rec in recommendations:
-            serializable_rec = {}
-            for key, value in rec.items():
-                if hasattr(value, 'item'):  # numpy scalar
-                    serializable_rec[key] = value.item()
-                elif isinstance(value, (list, dict)):
-                    serializable_rec[key] = value
-                else:
-                    serializable_rec[key] = value
+            serializable_rec = convert_numpy_to_python(rec)
             serializable_recommendations.append(serializable_rec)
         
         return jsonify({
@@ -487,42 +507,56 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
     
     # Try different recommendation methods
     try:
-            # First try content-based recommendations
-            recommendations = recommender_system.get_content_based_recommendations(
-                preferences=query,
-                n_recommendations=10
+        # First try content-based recommendations
+        recommendations = recommender_system.get_content_based_recommendations(
+            preferences=query,
+                n_recommendations=50
             )
             
-            # Process image data for recommendations
-            for rec in recommendations:
-                # Convert numpy objects to Python native types
-                rec = convert_numpy_to_python(rec)
-                
-                # Extract and process image URLs
-                rec['images'] = extract_image_urls(rec.get('images_y'))
-                rec['videos'] = extract_video_urls(rec.get('videos'), rec.get('title_y'), rec.get('brand'))
-                
-                # Ensure title is available
-                if 'title_y' not in rec and 'title' in rec:
-                    rec['title_y'] = rec['title']
-                
-                # Ensure brand is available
-                if 'brand' not in rec and 'brand_encoded' in rec:
-                    rec['brand'] = f"Brand_{rec['brand_encoded']}"
-                elif 'brand' not in rec:
-                    rec['brand'] = 'Unknown Brand'
-                
-                # Ensure price is available
-                if 'price_myr' not in rec:
-                    rec['price_myr'] = 0.0
-                
-                # Ensure rating is available
-                if 'average_rating' not in rec and 'rating' in rec:
-                    rec['average_rating'] = rec['rating']
-                elif 'average_rating' not in rec:
-                    rec['average_rating'] = 0.0
+        # Process image data for recommendations
+        for rec in recommendations:
+            # Extract and process image URLs BEFORE converting numpy types
+            rec['images'] = extract_image_urls(rec.get('images_y'))
+            rec['videos'] = extract_video_urls(rec.get('videos'), rec.get('title_y'), rec.get('brand'))
             
-            return recommendations
+            # Convert numpy objects to Python native types
+            rec = convert_numpy_to_python(rec)
+            
+            # Ensure laptop_id is available (critical for template links)
+            if 'laptop_id' not in rec:
+                logger.warning(f"Missing laptop_id in recommendation: {rec.get('asin', 'unknown')}")
+                # Try to get laptop_id from asin if available
+                if 'asin' in rec and df_laptop is not None:
+                    asin_match = df_laptop[df_laptop['asin'] == rec['asin']]
+                    if not asin_match.empty:
+                        rec['laptop_id'] = asin_match.iloc[0]['laptop_id']
+                    else:
+                        rec['laptop_id'] = 0  # Fallback
+                else:
+                    rec['laptop_id'] = 0  # Fallback
+            
+            
+            # Ensure title is available
+            if 'title_y' not in rec and 'title' in rec:
+                rec['title_y'] = rec['title']
+            
+            # Ensure brand is available
+            if 'brand' not in rec and 'brand_encoded' in rec:
+                rec['brand'] = f"Brand_{rec['brand_encoded']}"
+            elif 'brand' not in rec:
+                rec['brand'] = 'Unknown Brand'
+            
+            # Ensure price is available
+            if 'price_myr' not in rec:
+                rec['price_myr'] = 0.0
+            
+            # Ensure rating is available
+            if 'average_rating' not in rec and 'rating' in rec:
+                rec['average_rating'] = rec['rating']
+            elif 'average_rating' not in rec:
+                rec['average_rating'] = 0.0
+            
+        return recommendations
     except Exception as e:
         try:
             # Fallback to use case recommendations
@@ -555,13 +589,20 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
         (df_laptop['price_myr'] <= budget_max)
     ]
     
+    # Apply brand filtering if specified
+    brand_preference = preferences.get('brand', '')
+    if brand_preference and 'brand' in filtered_df.columns:
+        brand_mask = filtered_df['brand'].str.lower() == brand_preference.lower()
+        filtered_df = filtered_df[brand_mask]
+        logger.info(f"Brand filtering applied: {brand_preference}, {len(filtered_df)} laptops remaining")
+    
     # If no results with budget filter, try without budget constraint
     if len(filtered_df) == 0:
         logger.warning(f"No laptops found in budget range RM {budget_min} - RM {budget_max}, showing all laptops")
         filtered_df = df_laptop
     
     # Get sample laptops
-    sample_laptops = filtered_df.sample(min(10, len(filtered_df)))
+    sample_laptops = filtered_df.sample(min(50, len(filtered_df)))
     
     # Format for templates
     results = []
@@ -573,6 +614,11 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
         # Map column names to what templates expect
         laptop_dict['title_y'] = laptop_dict.get('title_y_clean', laptop_dict.get('title_y', 'Unknown Title'))
         laptop_dict['features'] = laptop_dict.get('features_clean', laptop_dict.get('features', ''))
+        
+        # Ensure laptop_id is available (critical for template links)
+        if 'laptop_id' not in laptop_dict:
+            logger.warning(f"Missing laptop_id in fallback recommendation: {laptop_dict.get('asin', 'unknown')}")
+            laptop_dict['laptop_id'] = 0  # Fallback
         
         # Extract media content
         laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))
@@ -641,66 +687,65 @@ def explore():
 
 @app.route('/laptop/<int:laptop_id>')
 def laptop_detail(laptop_id):
-    """Detailed view of a specific laptop."""
-    if df_laptop is None:
-        flash('Data not loaded. Please try again.', 'error')
+    # Get laptop data
+    laptop = recommender_system.get_laptop_by_id(laptop_id)
+    
+    if not laptop:
+        flash('Laptop not found.', 'error')
         return redirect(url_for('index'))
     
-    # Find the laptop using laptop_id
-    laptop = df_laptop[df_laptop['laptop_id'] == laptop_id]
-    if laptop.empty:
-        flash('Laptop not found.', 'error')
-        return redirect(url_for('explore'))
+    # Map brand ID to actual brand name if needed
+    if laptop and 'brand' in laptop:
+        laptop['brand'] = recommender_system.preprocessor.brand_mapping.get(
+            laptop['brand'], 
+            laptop['brand']
+        )
     
-    laptop = laptop.iloc[0].to_dict()
-    
-    # Map column names to what templates expect
-    laptop['title_y'] = laptop.get('title_y_clean', laptop.get('title_y', 'Unknown Title'))
-    laptop['features'] = laptop.get('features_clean', laptop.get('features', ''))
-    laptop['average_rating'] = laptop.get('average_rating', 0.0)  # Ensure average_rating exists
-    laptop['images'] = extract_image_urls(laptop.get('images_y'))  # Include images
-    laptop['videos'] = extract_video_urls(laptop.get('videos'), laptop.get('title_y'), laptop.get('brand'))  # Include videos
-    
-    # Ensure brand is available
-    if 'brand' not in laptop and 'brand_encoded' in laptop:
-        laptop['brand'] = f"Brand_{laptop['brand_encoded']}"
-    elif 'brand' not in laptop:
-        laptop['brand'] = 'Unknown Brand'
-    
-    # Ensure price is available
-    if 'price_myr' not in laptop:
-        laptop['price_myr'] = 0.0
+    # Extract and process images
+    laptop['images'] = extract_image_urls(laptop.get('images_y'))
     
     # Get similar laptops
+    similar_laptops = []
     try:
         similar_laptops = recommender_system.find_similar_laptops(
-            laptop_id=laptop_id,
-            n_recommendations=5
+            laptop_id, 
+            n_recommendations=8, 
+            method='content_based',
+            use_spec_similarity=True
         )
         
-        # Format similar laptops for templates
-        formatted_similar = []
+        # Process images for similar laptops too
         for similar in similar_laptops:
-            similar['title_y'] = similar.get('title_y_clean', similar.get('title_y', 'Unknown Title'))
-            similar['features'] = similar.get('features_clean', similar.get('features', ''))
-            similar['average_rating'] = similar.get('average_rating', 0.0)
-            similar['images'] = extract_image_urls(similar.get('images_y'))  # Include images
-            similar['videos'] = extract_video_urls(similar.get('videos'), similar.get('title_y'), similar.get('brand'))  # Include videos
-            if 'brand' not in similar and 'brand_encoded' in similar:
-                similar['brand'] = f"Brand_{similar['brand_encoded']}"
-            elif 'brand' not in similar:
-                similar['brand'] = 'Unknown Brand'
-            if 'price_myr' not in similar:
-                similar['price_myr'] = 0.0
-            formatted_similar.append(similar)
-        similar_laptops = formatted_similar
+            similar['images'] = extract_image_urls(similar.get('images_y'))
+            
     except Exception as e:
-        logger.warning(f"Could not get similar laptops: {e}")
+        logger.warning(f"Could not get similar laptops for {laptop_id}: {e}")
         similar_laptops = []
+    
+    # Parse videos if available - use the same function as other routes
+    videos = []
+    if laptop.get('videos') and laptop['videos'] != '':
+        try:
+            # Use the same video extraction function as other routes
+            video_urls = extract_video_urls(laptop.get('videos'), laptop.get('title_y'), laptop.get('brand'))
+            video_titles = extract_video_titles(laptop.get('videos'))
+            
+            # Create video objects
+            for i, url in enumerate(video_urls):
+                title = video_titles[i] if i < len(video_titles) else f"Video {i+1}"
+                videos.append({
+                    'title': title,
+                    'url': url,
+                    'user_id': ''  # Not available in current structure
+                })
+        except Exception as e:
+            logger.warning(f"Could not parse videos for laptop {laptop_id}: {e}")
+            videos = []
     
     return render_template('laptop_detail.html', 
                          laptop=laptop, 
-                         similar_laptops=similar_laptops)
+                         similar_laptops=similar_laptops,
+                         videos=videos)
 
 @app.route('/search')
 def search():

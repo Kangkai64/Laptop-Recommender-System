@@ -577,8 +577,10 @@ class BenchmarkScraper:
         Returns:
             int: CPU benchmark score
         """
+        # Use cached benchmarks only - don't fetch during processing
         if not self.cpu_benchmarks:
-            self.fetch_cpu_benchmarks()
+            logger.warning("CPU benchmarks not loaded, using default score")
+            return 3000  # Default score
         
         # Convert to lowercase for case-insensitive matching
         text_lower = text.lower()
@@ -705,8 +707,10 @@ class BenchmarkScraper:
         Returns:
             int: GPU benchmark score
         """
+        # Use cached benchmarks only - don't fetch during processing
         if not self.gpu_benchmarks:
-            self.fetch_gpu_benchmarks()
+            logger.warning("GPU benchmarks not loaded, using default score")
+            return 500  # Default score
         
         # Convert to lowercase for case-insensitive matching
         text_lower = text.lower()
@@ -1402,10 +1406,23 @@ class BenchmarkScraper:
         df_with_specs = self.add_specifications_from_columns(df)
         
         # Add CPU benchmark scores by searching in title_y, features, and details columns
-        df_with_specs['cpu_benchmark_score'] = df_with_specs.apply(self._get_cpu_benchmark_from_columns, axis=1)
+        logger.info(f"Adding CPU benchmark scores for {len(df_with_specs)} laptops...")
+        cpu_scores = []
+        for i, (_, row) in enumerate(df_with_specs.iterrows()):
+            if i % 100 == 0:  # Progress indicator every 100 rows
+                logger.info(f"Processing CPU benchmarks: {i}/{len(df_with_specs)} ({i/len(df_with_specs)*100:.1f}%)")
+            cpu_scores.append(self._get_cpu_benchmark_from_columns(row))
+        df_with_specs['cpu_benchmark_score'] = cpu_scores
         
         # Add GPU benchmark scores by searching in title_y, features, and details columns
-        df_with_specs['gpu_benchmark_score'] = df_with_specs.apply(self._get_gpu_benchmark_from_columns, axis=1)
+        logger.info(f"Adding GPU benchmark scores for {len(df_with_specs)} laptops...")
+        gpu_scores = []
+        for i, (_, row) in enumerate(df_with_specs.iterrows()):
+            if i % 100 == 0:  # Progress indicator every 100 rows
+                logger.info(f"Processing GPU benchmarks: {i}/{len(df_with_specs)} ({i/len(df_with_specs)*100:.1f}%)")
+            gpu_scores.append(self._get_gpu_benchmark_from_columns(row))
+        df_with_specs['gpu_benchmark_score'] = gpu_scores
+        logger.info("CPU and GPU benchmark scores processing completed!")
         
         # Calculate total benchmark score (weighted combination)
         df_with_specs['total_benchmark_score'] = (
