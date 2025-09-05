@@ -155,8 +155,24 @@
                                    class="btn btn-outline-primary btn-sm">
                                     <i class="fas fa-info-circle me-1"></i>Details
                                 </a>
-                                <button class="btn btn-outline-secondary btn-sm" 
-                                        onclick="addToCompare('{{ laptop.asin }}', '{{ laptop.title_y }}', '{{ laptop.brand }}', '{{ laptop.price_myr }}', '{{ laptop.average_rating }}')">
+                                <button class="btn btn-outline-secondary btn-sm compare-btn" 
+                                        data-asin="{{ laptop.asin }}"
+                                        data-title="{{ laptop.title_y }}"
+                                        data-brand="{{ laptop.brand }}"
+                                        data-price="{{ laptop.price_myr }}"
+                                        data-rating="{{ laptop.average_rating }}"
+                                        data-ram="{{ laptop.ram_gb }}GB"
+                                        data-storage="{{ laptop.storage_gb }}GB"
+                                        data-processor="{{ laptop.processor_model }}"
+                                        data-gpu="{{ laptop.gpu_model }}"
+                                        data-screen="{{ laptop.screen_size_inches }}"
+                                        data-storage-type="{{ laptop.storage_type }}"
+                                        data-os="{{ laptop.os }}"
+                                        data-ram-type="{{ laptop.ram_type }}"
+                                        data-cpu-benchmark="{{ laptop.cpu_benchmark_score }}"
+                                        data-gpu-benchmark="{{ laptop.gpu_benchmark_score }}"
+                                        data-performance-tier="{{ laptop.performance_tier }}"
+                                        data-gaming-capability="{{ laptop.gaming_capability }}">
                                     <i class="fas fa-plus me-1"></i>Compare
                                 </button>
                             </div>

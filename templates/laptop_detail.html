@@ -89,8 +89,7 @@
                                                      class="img-thumbnail thumbnail-image" 
                                                      alt="{{ laptop.title_y }} - Image {{ loop.index }}"
                                                      onclick="changeMainImage('{{ image }}', {{ loop.index }})"
-                                                     style="cursor: pointer; border: 2px solid #dee2e6;"
-                                                     {% if loop.first %}id="activeThumbnail" style="cursor: pointer; border: 2px solid #007bff;"{% endif %}
+                                                     {% if loop.first %}id="activeThumbnail" style="cursor: pointer; border: 2px solid #007bff;"{% else %}style="cursor: pointer; border: 2px solid #dee2e6;"{% endif %}
                                                      onerror="this.style.display='none';">
                                             </div>
                                         {% endfor %}
@@ -141,7 +140,24 @@
                     
                     <!-- Action Buttons -->
                     <div class="d-grid gap-2 d-md-block">
-                        <button class="btn btn-primary btn-lg" onclick="addToCompare('{{ laptop.asin }}')">
+                         <button class="btn btn-primary btn-lg compare-btn" 
+                                 data-asin="{{ laptop.asin }}"
+                                 data-title="{{ laptop.title_y }}"
+                                 data-brand="{{ laptop.brand }}"
+                                 data-price="{{ laptop.price_myr }}"
+                                 data-rating="{{ laptop.average_rating }}"
+                                 data-ram="{{ laptop.ram_gb }}GB"
+                                 data-storage="{{ laptop.storage_gb }}GB"
+                                 data-processor="{{ laptop.processor_model }}"
+                                 data-gpu="{{ laptop.gpu_model }}"
+                                 data-screen="{{ laptop.screen_size_inches }}"
+                                 data-storage-type="{{ laptop.storage_type }}"
+                                 data-os="{{ laptop.os }}"
+                                 data-ram-type="{{ laptop.ram_type }}"
+                                 data-cpu-benchmark="{{ laptop.cpu_benchmark_score }}"
+                                 data-gpu-benchmark="{{ laptop.gpu_benchmark_score }}"
+                                 data-performance-tier="{{ laptop.performance_tier }}"
+                                 data-gaming-capability="{{ laptop.gaming_capability }}">
                             <i class="fas fa-plus me-2"></i>Add to Comparison
                         </button>
                         <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary btn-lg">
@@ -162,22 +178,159 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="row">
+                    <!-- Basic Information -->
+                    <div class="row mb-3">
                         <div class="col-md-6">
-                            <h6>Brand</h6>
+                            <h6><i class="fas fa-tag me-2 text-primary"></i>Brand</h6>
                             <p class="text-muted">{{ laptop.brand }}</p>
                         </div>
                         <div class="col-md-6">
-                            <h6>Price Category</h6>
+                            <h6><i class="fas fa-dollar-sign me-2 text-primary"></i>Price Category</h6>
                             <p class="text-muted">{{ laptop.price_category_myr }}</p>
                         </div>
                     </div>
                     
+                    <!-- Technical Specifications -->
+                    <div class="row mb-3">
+                        {% if laptop.ram_gb %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-memory me-2 text-primary"></i>RAM</h6>
+                            <p class="text-muted">{{ laptop.ram_gb }}GB {% if laptop.ram_type %}({{ laptop.ram_type }}){% endif %}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if laptop.storage_gb %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-hdd me-2 text-primary"></i>Storage</h6>
+                            <p class="text-muted">
+                                {% if laptop.storage_gb >= 1024 %}
+                                    {{ "%.1f"|format(laptop.storage_gb/1024) }} TB
+                                {% else %}
+                                    {{ laptop.storage_gb }} GB
+                                {% endif %}
+                                {% if laptop.storage_type %}({{ laptop.storage_type }}){% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row mb-3">
+                        {% if laptop.screen_size_inches %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-desktop me-2 text-primary"></i>Screen Size</h6>
+                            <p class="text-muted">{{ laptop.screen_size_inches }}"</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if laptop.os %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-laptop me-2 text-primary"></i>Operating System</h6>
+                            <p class="text-muted">{{ laptop.os }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Processor and GPU -->
+                    <div class="row mb-3">
+                        {% if laptop.processor_model %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-microchip me-2 text-primary"></i>Processor</h6>
+                            <p class="text-muted">{{ laptop.processor_model }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if laptop.gpu_model %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-gamepad me-2 text-primary"></i>Graphics</h6>
+                            <p class="text-muted">{{ laptop.gpu_model }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Performance Scores -->
+                    {% if laptop.cpu_benchmark_score or laptop.gpu_benchmark_score %}
+                    <div class="row mb-3">
+                        {% if laptop.cpu_benchmark_score %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-tachometer-alt me-2 text-primary"></i>CPU Performance</h6>
+                            <p class="text-muted">
+                                {{ laptop.cpu_benchmark_score }} points
+                                {% if laptop.cpu_benchmark_score >= 15000 %}
+                                    <span class="badge bg-success ms-2">High Performance</span>
+                                {% elif laptop.cpu_benchmark_score >= 10000 %}
+                                    <span class="badge bg-warning ms-2">Good Performance</span>
+                                {% else %}
+                                    <span class="badge bg-info ms-2">Standard Performance</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if laptop.gpu_benchmark_score %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-gamepad me-2 text-primary"></i>GPU Performance</h6>
+                            <p class="text-muted">
+                                {{ laptop.gpu_benchmark_score }} points
+                                {% if laptop.gpu_benchmark_score >= 8000 %}
+                                    <span class="badge bg-success ms-2">Gaming Ready</span>
+                                {% elif laptop.gpu_benchmark_score >= 5000 %}
+                                    <span class="badge bg-warning ms-2">Light Gaming</span>
+                                {% else %}
+                                    <span class="badge bg-info ms-2">Basic Graphics</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Performance Tier and Gaming Capability -->
+                    {% if laptop.performance_tier or laptop.gaming_capability %}
+                    <div class="row mb-3">
+                        {% if laptop.performance_tier %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-star me-2 text-primary"></i>Performance Tier</h6>
+                            <p class="text-muted">
+                                {{ laptop.performance_tier }}
+                                {% if laptop.performance_tier == 'Ultra High' %}
+                                    <span class="badge bg-danger ms-2">Premium</span>
+                                {% elif laptop.performance_tier == 'High' %}
+                                    <span class="badge bg-success ms-2">High-End</span>
+                                {% elif laptop.performance_tier == 'Medium-High' %}
+                                    <span class="badge bg-warning ms-2">Mid-High</span>
+                                {% else %}
+                                    <span class="badge bg-info ms-2">{{ laptop.performance_tier }}</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if laptop.gaming_capability %}
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-gamepad me-2 text-primary"></i>Gaming Capability</h6>
+                            <p class="text-muted">
+                                {{ laptop.gaming_capability }}
+                                {% if laptop.gaming_capability == 'High-End Gaming' %}
+                                    <span class="badge bg-danger ms-2">AAA Games</span>
+                                {% elif laptop.gaming_capability == 'Mid-Range Gaming' %}
+                                    <span class="badge bg-warning ms-2">Popular Games</span>
+                                {% elif laptop.gaming_capability == 'Casual Gaming' %}
+                                    <span class="badge bg-info ms-2">Casual Games</span>
+                                {% else %}
+                                    <span class="badge bg-secondary ms-2">Basic</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Additional Details -->
                     {% if laptop.details %}
                         {% for key, value in laptop.details.items() %}
-                        <div class="row">
+                        <div class="row mb-2">
                             <div class="col-md-6">
-                                <h6>{{ key|title }}</h6>
+                                <h6><i class="fas fa-info-circle me-2 text-primary"></i>{{ key|title }}</h6>
                                 <p class="text-muted">{{ value }}</p>
                             </div>
                         </div>
@@ -187,7 +340,7 @@
                     <!-- Features -->
                     {% if laptop.features %}
                     <div class="mt-4">
-                        <h6>Key Features</h6>
+                        <h6><i class="fas fa-list me-2 text-primary"></i>Key Features</h6>
                         <div class="features-text">
                             {{ laptop.features }}
                         </div>
@@ -199,7 +352,7 @@
     </div>
 
     <!-- Media Section -->
-    {% if laptop.videos and laptop.videos|length > 0 %}
+    {% if videos and videos|length > 0 %}
     <div class="row mt-4">
         <div class="col-12">
             <div class="card">
@@ -211,26 +364,27 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        {% for video in laptop.videos %}
+                        {% for video in videos %}
                         <div class="col-md-6 col-lg-4">
                             <div class="video-container">
-                                {% if video.endswith('.mp4') or video.endswith('.webm') or video.endswith('.ogg') %}
+                                {% if video.url.endswith('.mp4') or video.url.endswith('.webm') or video.url.endswith('.ogg') %}
                                     <video controls class="img-fluid rounded" style="max-height: 200px;">
-                                        <source src="{{ video }}" type="video/mp4">
+                                        <source src="{{ video.url }}" type="video/mp4">
                                         Your browser does not support the video tag.
                                     </video>
-                                {% elif 'amazon.com' in video %}
+                                {% elif 'amazon.com' in video.url %}
                                     <div class="bg-light rounded p-3 text-center">
                                         <i class="fas fa-video text-muted" style="font-size: 2rem;"></i>
-                                        <p class="text-muted mt-2 mb-0">Amazon Video Review</p>
-                                        <a href="{{ video }}" target="_blank" class="btn btn-outline-primary btn-sm mt-2">
+                                        <p class="text-muted mt-2 mb-1"><strong>{{ video.title }}</strong></p>
+                                        <p class="text-muted small mb-2">Amazon Video Review</p>
+                                        <a href="{{ video.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
                                             <i class="fas fa-external-link-alt me-1"></i>Watch Video
                                         </a>
                                     </div>
-                                {% elif 'youtube.com' in video or 'youtu.be' in video %}
+                                {% elif 'youtube.com' in video.url or 'youtu.be' in video.url %}
                                     <div class="ratio ratio-16x9">
-                                        <iframe src="{{ video.replace('watch?v=', 'embed/') }}" 
-                                                title="Product Video" 
+                                        <iframe src="{{ video.url.replace('watch?v=', 'embed/') }}" 
+                                                title="{{ video.title }}" 
                                                 frameborder="0" 
                                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                                 allowfullscreen></iframe>
@@ -238,7 +392,13 @@
                                 {% else %}
                                     <div class="bg-light rounded p-3 text-center">
                                         <i class="fas fa-video text-muted" style="font-size: 2rem;"></i>
-                                        <p class="text-muted mt-2 mb-0">Video: {{ video }}</p>
+                                        <p class="text-muted mt-2 mb-1"><strong>{{ video.title }}</strong></p>
+                                        <p class="text-muted small mb-2">Product Video</p>
+                                        {% if video.url %}
+                                        <a href="{{ video.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                            <i class="fas fa-external-link-alt me-1"></i>Watch Video
+                                        </a>
+                                        {% endif %}
                                     </div>
                                 {% endif %}
                             </div>
@@ -326,15 +486,89 @@
                                 </span>
                             </div>
                             
+                            <!-- Specifications -->
+                            <div class="mb-3">
+                                <div class="row g-1">
+                                    {% if similar.ram_gb and similar.ram_gb > 0 %}
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-memory me-1"></i>
+                                            {{ similar.ram_gb|int }}GB RAM
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% if similar.storage_gb and similar.storage_gb > 0 %}
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-hdd me-1"></i>
+                                            {% if similar.storage_gb >= 1024 %}
+                                                {{ "%.1f"|format(similar.storage_gb/1024) }} TB {{ similar.storage_type if similar.storage_type != 'Unknown' else 'Storage' }}
+                                            {% else %}
+                                                {{ similar.storage_gb|int }} GB {{ similar.storage_type if similar.storage_type != 'Unknown' else 'Storage' }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% if similar.screen_size_inches and similar.screen_size_inches > 0 %}
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-desktop me-1"></i>
+                                            {{ similar.screen_size_inches|round(1) }}" Screen
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% if similar.processor_model and similar.processor_model != 'Unknown' %}
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-microchip me-1"></i>
+                                            {{ similar.processor_model[:15] }}{% if similar.processor_model|length > 15 %}...{% endif %}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Benchmark Scores -->
+                            {% if similar.cpu_benchmark_score and similar.cpu_benchmark_score > 0 %}
+                            <div class="mb-3">
+                                <div class="row g-1">
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-tachometer-alt me-1 text-primary"></i>
+                                            CPU: {{ similar.cpu_benchmark_score|int }}
+                                        </small>
+                                    </div>
+                                    {% if similar.gpu_benchmark_score and similar.gpu_benchmark_score > 0 %}
+                                    <div class="col-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-gamepad me-1 text-success"></i>
+                                            GPU: {{ similar.gpu_benchmark_score|int }}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% if similar.performance_tier and similar.performance_tier != 'Unknown' %}
+                                <small class="text-muted">
+                                    <i class="fas fa-chart-line me-1"></i>
+                                    {{ similar.performance_tier }} Performance
+                                </small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
                             <!-- Similarity Score -->
                             {% if similar.similarity_score %}
                             <div class="mb-3">
+                                {% set score_percent = (similar.similarity_score * 100)|round(1) %}
+                                {% set bar_color = 'bg-danger' if score_percent >= 80 else 'bg-warning' if score_percent >= 60 else 'bg-info' if score_percent >= 40 else 'bg-secondary' %}
+                                {% set score_label = 'Excellent Match' if score_percent >= 80 else 'Good Match' if score_percent >= 60 else 'Moderate Match' if score_percent >= 40 else 'Fair Match' %}
                                 <div class="progress" style="height: 6px;">
-                                    <div class="progress-bar bg-success" 
-                                         style="width: {{ (similar.similarity_score * 100)|round(1) }}%"></div>
+                                    <!-- stylelint-disable-next-line -->
+                                    <div class="progress-bar {{ bar_color }}" 
+                                         style="width: {{ score_percent }}%"></div>
                                 </div>
                                 <small class="text-muted">
-                                    {{ (similar.similarity_score * 100)|round(1) }}% similar
+                                    <strong>{{ score_label }}:</strong> {{ score_percent }}% similar
                                 </small>
                             </div>
                             {% endif %}
@@ -346,8 +580,24 @@
                                    class="btn btn-outline-primary btn-sm">
                                     <i class="fas fa-info-circle me-1"></i>Details
                                 </a>
-                                <button class="btn btn-outline-secondary btn-sm" 
-                                        onclick="addToCompare('{{ similar.asin }}')">
+                                                                 <button class="btn btn-outline-secondary btn-sm compare-btn" 
+                                         data-asin="{{ similar.asin }}"
+                                         data-title="{{ similar.title_y }}"
+                                         data-brand="{{ similar.brand }}"
+                                         data-price="{{ similar.price_myr }}"
+                                         data-rating="{{ similar.average_rating }}"
+                                         data-ram="{{ similar.ram_gb }}GB"
+                                         data-storage="{{ similar.storage_gb }}GB"
+                                         data-processor="{{ similar.processor_model }}"
+                                         data-gpu="{{ similar.gpu_model }}"
+                                         data-screen="{{ similar.screen_size_inches }}"
+                                         data-storage-type="{{ similar.storage_type }}"
+                                         data-os="{{ similar.os }}"
+                                         data-ram-type="{{ similar.ram_type }}"
+                                         data-cpu-benchmark="{{ similar.cpu_benchmark_score }}"
+                                         data-gpu-benchmark="{{ similar.gpu_benchmark_score }}"
+                                         data-performance-tier="{{ similar.performance_tier }}"
+                                         data-gaming-capability="{{ similar.gaming_capability }}">
                                     <i class="fas fa-plus me-1"></i>Compare
                                 </button>
                             </div>
@@ -360,23 +610,6 @@
     </div>
     {% endif %}
 
-    <!-- Comparison Section -->
-    <div class="card mt-5" id="comparison-section" style="display: none;">
-        <div class="card-header">
-            <h5 class="mb-0">
-                <i class="fas fa-balance-scale me-2"></i>
-                Compare Selected Laptops
-            </h5>
-        </div>
-        <div class="card-body">
-            <div id="comparison-table"></div>
-            <div class="text-center mt-3">
-                <button class="btn btn-outline-danger btn-sm" onclick="clearComparison()">
-                    <i class="fas fa-trash me-1"></i>Clear Comparison
-                </button>
-            </div>
-        </div>
-    </div>
 
     <!-- Quick Actions -->
     <div class="row mt-5">
@@ -418,62 +651,6 @@
 
 {% block extra_js %}
 <script>
-let comparisonLaptops = [];
-
-function addToCompare(laptopId) {
-    if (comparisonLaptops.length >= 3) {
-        showNotification('You can compare up to 3 laptops at a time.', 'warning');
-        return;
-    }
-    
-    if (comparisonLaptops.includes(laptopId)) {
-        showNotification('This laptop is already in your comparison.', 'info');
-        return;
-    }
-    
-    comparisonLaptops.push(laptopId);
-    updateComparisonSection();
-}
-
-function removeFromCompare(laptopId) {
-    comparisonLaptops = comparisonLaptops.filter(id => id !== laptopId);
-    updateComparisonSection();
-}
-
-function clearComparison() {
-    comparisonLaptops = [];
-    updateComparisonSection();
-}
-
-function updateComparisonSection() {
-    if (comparisonLaptops.length === 0) {
-        $('#comparison-section').hide();
-        return;
-    }
-    
-    $('#comparison-section').show();
-    
-    let html = '<div class="row">';
-    comparisonLaptops.forEach((laptopId, index) => {
-        html += `
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h6>Laptop ${index + 1}</h6>
-                        <p class="text-muted">ID: ${laptopId}</p>
-                        <button class="btn btn-outline-danger btn-sm" onclick="removeFromCompare('${laptopId}')">
-                            <i class="fas fa-times me-1"></i>Remove
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    
-    $('#comparison-table').html(html);
-}
-
 // Image Gallery Functions
 function changeMainImage(imageSrc, imageIndex) {
     // Update main image

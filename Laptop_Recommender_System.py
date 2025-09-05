@@ -64,7 +64,7 @@ class LaptopRecommenderSystem:
         # Default configuration
         self.config = {
             'system': {
-                'max_recommendations': 10,
+                'max_recommendations': 50,
                 'min_similarity_threshold': 0.1,
                 'enable_logging': True,
                 'cache_results': True
@@ -132,14 +132,8 @@ class LaptopRecommenderSystem:
             # Initialize preprocessor
             preprocessor = LaptopDataPreprocessor()
             
-            # Load raw data
-            raw_data = preprocessor.load_data()
-            
-            # Preprocess data
-            processed_data = preprocessor.preprocess_pipeline()
-            
-            # Separate into laptop and rating dataframes
-            self.df_laptop, self.df_rating = preprocessor.separate_dataframes(processed_data)
+            # Use the separated preprocessing pipeline that includes benchmark scraper
+            self.df_laptop, self.df_rating = preprocessor.preprocess_separated_pipeline()
             
             logger.info(f"Data loaded successfully. Laptop data: {self.df_laptop.shape}, Rating data: {self.df_rating.shape}")
             
@@ -449,31 +443,75 @@ class LaptopRecommenderSystem:
         })
     
     def find_similar_laptops(self, laptop_id: int, n_recommendations: int = None,
-                            method: str = 'content_based') -> List[Dict]:
+                            method: str = 'content_based', use_spec_similarity: bool = True) -> List[Dict]:
         """
-        Find laptops similar to a given laptop.
+        Find laptops similar to a given laptop based on specifications and benchmarks.
         
         Args:
             laptop_id: laptop_id (integer) of the reference laptop
             n_recommendations: Number of similar laptops to return
             method: Method to use ('content_based' or 'collaborative')
+            use_spec_similarity: Whether to use specification-focused similarity for better results
             
         Returns:
-            List[Dict]: List of similar laptops
+            List[Dict]: List of similar laptops with benchmark and specification data
         """
         if n_recommendations is None:
             n_recommendations = self.config['system']['max_recommendations']
         
         try:
-            logger.info(f"Finding similar laptops to {laptop_id} using {method} method")
+            logger.info(f"Finding similar laptops to {laptop_id} using {method} method (spec_similarity={use_spec_similarity})")
             
             if method == 'content_based':
                 if self.content_based_filter is None:
                     raise ValueError("Content-based filtering engine not initialized")
                 
+                # Use specification-focused similarity for better results
                 recommendations = self.content_based_filter.get_recommendations(
-                    laptop_id, n_recommendations
+                    laptop_id, n_recommendations, use_spec_similarity=use_spec_similarity
                 )
+                
+                # Add benchmark and specification information to recommendations
+                for rec in recommendations:
+                    # Get full laptop data for this recommendation
+                    laptop_data = self.df_laptop[self.df_laptop['laptop_id'] == rec['laptop_id']]
+                    if not laptop_data.empty:
+                        laptop_row = laptop_data.iloc[0]
+                        
+                        # Add essential fields that template expects
+                        rec['title_y'] = laptop_row.get('title_y_clean', laptop_row.get('title_y', 'Unknown Title'))
+                        rec['features'] = laptop_row.get('features_clean', laptop_row.get('features', ''))
+                        rec['average_rating'] = laptop_row.get('average_rating', 0.0)
+                        rec['price_myr'] = laptop_row.get('price_myr', 0.0)
+                        
+                        # Add brand information
+                        if 'brand_original' in laptop_row and pd.notna(laptop_row['brand_original']):
+                            rec['brand'] = laptop_row['brand_original']
+                        elif 'brand_encoded' in laptop_row:
+                            rec['brand'] = f"Brand_{laptop_row['brand_encoded']}"
+                        else:
+                            rec['brand'] = 'Unknown Brand'
+                        
+                        # Add images and videos
+                        rec['images_y'] = laptop_row.get('images_y', '')
+                        rec['videos'] = laptop_row.get('videos', '')
+                        
+                        # Add benchmark scores if available
+                        if 'cpu_benchmark_score' in self.df_laptop.columns:
+                            rec['cpu_benchmark_score'] = laptop_row.get('cpu_benchmark_score', 0)
+                            rec['gpu_benchmark_score'] = laptop_row.get('gpu_benchmark_score', 0)
+                            rec['total_benchmark_score'] = laptop_row.get('total_benchmark_score', 0)
+                            rec['performance_tier'] = laptop_row.get('performance_tier', 'Unknown')
+                            rec['gaming_capability'] = laptop_row.get('gaming_capability', 'Unknown')
+                            
+                            # Add detailed specifications
+                            rec['ram_gb'] = laptop_row.get('ram_gb', 0)
+                            rec['storage_gb'] = laptop_row.get('storage_gb', 0)
+                            rec['screen_size_inches'] = laptop_row.get('screen_size_inches', 0)
+                            rec['processor_model'] = laptop_row.get('processor_model', 'Unknown')
+                            rec['gpu_model'] = laptop_row.get('gpu_model', 'Unknown')
+                            rec['storage_type'] = laptop_row.get('storage_type', 'Unknown')
+                            rec['ram_type'] = laptop_row.get('ram_type', 'Unknown')
                 
             elif method == 'collaborative':
                 if self.collaborative_filter is None:
@@ -554,6 +592,71 @@ class LaptopRecommenderSystem:
         except Exception as e:
             logger.error(f"Error saving recommendations: {str(e)}")
             raise
+    
+    def get_laptop_by_id(self, laptop_id: int) -> Optional[Dict]:
+        """
+        Get laptop details by laptop_id.
+        
+        Args:
+            laptop_id: The laptop ID to search for
+            
+        Returns:
+            Dict with laptop details or None if not found
+        """
+        try:
+            if self.df_laptop is None:
+                logger.error("Laptop data not loaded")
+                return None
+            
+            # Find laptop by laptop_id
+            laptop_row = self.df_laptop[self.df_laptop['laptop_id'] == laptop_id]
+            
+            if laptop_row.empty:
+                logger.warning(f"Laptop with ID {laptop_id} not found")
+                return None
+            
+            # Convert to dictionary
+            laptop_data = laptop_row.iloc[0].to_dict()
+            
+            # Ensure brand is available
+            if 'brand' not in laptop_data and 'brand_original' in laptop_data:
+                laptop_data['brand'] = laptop_data['brand_original']
+            elif 'brand' not in laptop_data and 'brand_encoded' in laptop_data:
+                laptop_data['brand'] = f"Brand_{laptop_data['brand_encoded']}"
+            
+            # Ensure title_y is available (template expects this)
+            if 'title_y' not in laptop_data and 'title_y_clean' in laptop_data:
+                laptop_data['title_y'] = laptop_data['title_y_clean']
+            elif 'title_y' not in laptop_data and 'title' in laptop_data:
+                laptop_data['title_y'] = laptop_data['title']
+            
+            # Ensure features is available
+            if 'features' not in laptop_data and 'features_clean' in laptop_data:
+                laptop_data['features'] = laptop_data['features_clean']
+            
+            # Ensure average_rating is available
+            if 'average_rating' not in laptop_data:
+                laptop_data['average_rating'] = 0.0
+            
+            # Ensure price_myr is available
+            if 'price_myr' not in laptop_data:
+                laptop_data['price_myr'] = 0.0
+            
+            return laptop_data
+            
+        except Exception as e:
+            logger.error(f"Error getting laptop by ID {laptop_id}: {str(e)}")
+            return None
+    
+    @property
+    def preprocessor(self):
+        """
+        Get the data preprocessor instance.
+        This is a property to maintain compatibility with existing code.
+        """
+        if not hasattr(self, '_preprocessor'):
+            self._preprocessor = LaptopDataPreprocessor()
+        return self._preprocessor
 
 
 def create_laptop_recommender_system(config: Optional[Dict] = None) -> LaptopRecommenderSystem:

@@ -77,102 +77,175 @@
                         {% endif %}
                         
                         <div class="card-body">
-                        <!-- Title and Brand -->
-                        {% set title = laptop.title_y if laptop.title_y else laptop.title %}
-                        <h5 class="card-title">{{ title[:100] }}{% if title|length > 100 %}...{% endif %}</h5>
-                        <p class="text-muted mb-2">
-                            <i class="fas fa-tag me-1"></i>
-                            {% if laptop.brand and laptop.brand != 'Unknown Brand' %}
-                                {{ laptop.brand }}
-                            {% else %}
-                                Brand {{ laptop.brand_encoded if laptop.brand_encoded else 'Unknown' }}
-                            {% endif %}
-                        </p>
-                        
-                        <!-- Rating -->
-                        <div class="mb-2">
-                            <span class="rating-stars">
-                                {% set rating = laptop.average_rating if laptop.average_rating else laptop.rating %}
-                                {% for i in range(5) %}
-                                    {% if i < rating|int %}
-                                        <i class="fas fa-star text-warning"></i>
-                                    {% elif rating % 1 >= 0.5 and i == rating|int %}
-                                        <i class="fas fa-star-half-alt text-warning"></i>
-                                    {% else %}
-                                        <i class="far fa-star text-warning"></i>
-                                    {% endif %}
-                                {% endfor %}
-                            </span>
-                            <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
-                        </div>
-                        
-                        <!-- Price -->
-                        <div class="mb-3">
-                            <span class="price-tag">
-                                RM {{ "%.2f"|format(laptop.price_myr if laptop.price_myr else 0) }}
-                            </span>
-                        </div>
-                        
-                        <!-- Key Features -->
-                        <div class="mb-3">
-                            <small class="text-muted">
-                                {% set features = laptop.features if laptop.features else '' %}
-                                {% if features and features != '' %}
-                                    {% set features_text = features %}
-                                    {% if features_text|length > 100 %}
-                                        {% set features_text = features_text[:100] + '...' %}
-                                    {% endif %}
-                                    <div class="features-text">{{ features_text }}</div>
+                            <!-- Title and Brand -->
+                            {% set title = laptop.title_y if laptop.title_y else laptop.title %}
+                            <h5 class="card-title">{{ title[:100] }}{% if title|length > 100 %}...{% endif %}</h5>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-tag me-1"></i>
+                                {% if laptop.brand and laptop.brand != 'Unknown Brand' %}
+                                    {{ laptop.brand }}
                                 {% else %}
-                                    <span class="text-muted">No features available</span>
+                                    Brand {{ laptop.brand_encoded if laptop.brand_encoded else 'Unknown' }}
                                 {% endif %}
-                            </small>
-                        </div>
-                        
-                        <!-- Media Indicators -->
-                        <div class="mb-3">
-                            <small class="text-muted">
-                                {% if laptop.videos and laptop.videos|length > 0 %}
-                                    <span class="badge bg-success me-1">
-                                        <i class="fas fa-video me-1"></i>{{ laptop.videos|length }} Video{{ 's' if laptop.videos|length != 1 else '' }}
-                                    </span>
-                                {% endif %}
-                                {% if laptop.images and laptop.images|length > 0 %}
-                                    <span class="badge bg-info me-1">
-                                        <i class="fas fa-image me-1"></i>{{ laptop.images|length }} Image{{ 's' if laptop.images|length != 1 else '' }}
-                                    </span>
-                                {% endif %}
-                            </small>
-                        </div>
-                        
-                        <!-- Similarity Score -->
-                        {% if laptop.similarity_score %}
-                        <div class="mb-3">
-                            <div class="progress" style="height: 8px;">
-                                <div class="progress-bar bg-success" 
-                                     style="width: {{ (laptop.similarity_score * 100)|round(1) }}%"></div>
+                            </p>
+                            
+                            <!-- Rating -->
+                            <div class="mb-2">
+                                <span class="rating-stars">
+                                    {% set rating = laptop.average_rating if laptop.average_rating else laptop.rating %}
+                                    {% for i in range(5) %}
+                                        {% if i < rating|int %}
+                                            <i class="fas fa-star text-warning"></i>
+                                        {% elif rating % 1 >= 0.5 and i == rating|int %}
+                                            <i class="fas fa-star-half-alt text-warning"></i>
+                                        {% else %}
+                                            <i class="far fa-star text-warning"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                                <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
                             </div>
-                            <small class="text-muted">
-                                Match Score: {{ (laptop.similarity_score * 100)|round(1) }}%
-                            </small>
+                            
+                            <!-- Price -->
+                            <div class="mb-3">
+                                <span class="price-tag">
+                                    RM {{ "%.2f"|format(laptop.price_myr if laptop.price_myr else 0) }}
+                                </span>
+                            </div>
+                            
+                            <!-- Technical Specifications -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    {% if laptop.ram_gb or laptop.storage_gb or laptop.screen_size_inches %}
+                                        <div class="specs-summary">
+                                            {% if laptop.ram_gb %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-memory me-1"></i>{{ laptop.ram_gb }}GB RAM
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.storage_gb %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-hdd me-1"></i>
+                                                    {% if laptop.storage_gb >= 1024 %}
+                                                        {{ "%.1f"|format(laptop.storage_gb/1024) }} TB
+                                                    {% else %}
+                                                        {{ laptop.storage_gb }} GB
+                                                    {% endif %}
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.screen_size_inches %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-desktop me-1"></i>{{ laptop.screen_size_inches }}"
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- Performance Indicators -->
+                                    {% if laptop.performance_tier or laptop.gaming_capability %}
+                                        <div class="performance-summary mt-2">
+                                            {% if laptop.performance_tier %}
+                                                <span class="badge 
+                                                    {% if laptop.performance_tier == 'Ultra High' %}bg-danger
+                                                    {% elif laptop.performance_tier == 'High' %}bg-success
+                                                    {% elif laptop.performance_tier == 'Medium-High' %}bg-warning
+                                                    {% else %}bg-info{% endif %} me-1 mb-1">
+                                                    <i class="fas fa-star me-1"></i>{{ laptop.performance_tier }}
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.gaming_capability %}
+                                                <span class="badge 
+                                                    {% if laptop.gaming_capability == 'High-End Gaming' %}bg-danger
+                                                    {% elif laptop.gaming_capability == 'Mid-Range Gaming' %}bg-warning
+                                                    {% elif laptop.gaming_capability == 'Casual Gaming' %}bg-info
+                                                    {% else %}bg-secondary{% endif %} me-1 mb-1">
+                                                    <i class="fas fa-gamepad me-1"></i>{{ laptop.gaming_capability }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- Key Features (fallback) -->
+                                    {% if not laptop.ram_gb and not laptop.storage_gb and not laptop.screen_size_inches %}
+                                        {% set features = laptop.features if laptop.features else '' %}
+                                        {% if features and features != '' %}
+                                            {% set features_text = features %}
+                                            {% if features_text|length > 100 %}
+                                                {% set features_text = features_text[:100] + '...' %}
+                                            {% endif %}
+                                            <div class="features-text">{{ features_text }}</div>
+                                        {% else %}
+                                            <span class="text-muted">No features available</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <!-- Media Indicators -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    {% if laptop.videos and laptop.videos|length > 0 %}
+                                        <span class="badge bg-success me-1">
+                                            <i class="fas fa-video me-1"></i>{{ laptop.videos|length }} Video{{ 's' if laptop.videos|length != 1 else '' }}
+                                        </span>
+                                    {% endif %}
+                                    {% if laptop.images and laptop.images|length > 0 %}
+                                        <span class="badge bg-info me-1">
+                                            <i class="fas fa-image me-1"></i>{{ laptop.images|length }} Image{{ 's' if laptop.images|length != 1 else '' }}
+                                        </span>
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <!-- Similarity Score -->
+                            {% if laptop.similarity_score %}
+                            <div class="mb-3">
+                                {% set score_percent = (laptop.similarity_score * 100)|round(1) %}
+                                {% set bar_color = 'bg-danger' if score_percent >= 80 else 'bg-warning' if score_percent >= 60 else 'bg-info' if score_percent >= 40 else 'bg-secondary' %}
+                                {% set score_label = 'Excellent Match' if score_percent >= 80 else 'Good Match' if score_percent >= 60 else 'Moderate Match' if score_percent >= 40 else 'Fair Match' %}
+                                
+                                <div class="progress" style="height: 8px;">
+                                    <!-- stylelint-disable-next-line -->
+                                    <div class="progress-bar {{ bar_color }}" 
+                                         style="width: {{ score_percent }}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    <strong>{{ score_label }}:</strong> {{ score_percent }}% match
+                                </small>
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="card-footer bg-transparent">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <a href="{{ url_for('laptop_detail', laptop_id=laptop.laptop_id) }}" 
-                               class="btn btn-outline-primary btn-sm">
-                                <i class="fas fa-info-circle me-1"></i>Details
-                            </a>
-                            <button class="btn btn-outline-secondary btn-sm" 
-                                    onclick="addToCompare('{{ laptop.asin }}', '{{ laptop.title_y }}', '{{ laptop.brand }}', '{{ laptop.price_myr }}', '{{ laptop.average_rating }}')">
-                                <i class="fas fa-plus me-1"></i>Compare
-                            </button>
+                        
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ url_for('laptop_detail', laptop_id=laptop.laptop_id) }}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </a>
+                                <button class="btn btn-outline-secondary btn-sm compare-btn" 
+                                        data-asin="{{ laptop.asin }}"
+                                        data-title="{{ laptop.title_y }}"
+                                        data-brand="{{ laptop.brand }}"
+                                        data-price="{{ laptop.price_myr }}"
+                                        data-rating="{{ laptop.average_rating }}"
+                                        data-ram="{{ laptop.ram_gb }}GB"
+                                        data-storage="{{ laptop.storage_gb }}GB"
+                                        data-processor="{{ laptop.processor_model }}"
+                                        data-gpu="{{ laptop.gpu_model }}"
+                                        data-screen="{{ laptop.screen_size_inches }}"
+                                        data-storage-type="{{ laptop.storage_type }}"
+                                        data-os="{{ laptop.os }}"
+                                        data-ram-type="{{ laptop.ram_type }}"
+                                        data-cpu-benchmark="{{ laptop.cpu_benchmark_score }}"
+                                        data-gpu-benchmark="{{ laptop.gpu_benchmark_score }}"
+                                        data-performance-tier="{{ laptop.performance_tier }}"
+                                        data-gaming-capability="{{ laptop.gaming_capability }}">
+                                    <i class="fas fa-plus me-1"></i>Compare
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
             {% endfor %}
         </div>
         
