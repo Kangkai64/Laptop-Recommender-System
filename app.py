@@ -15,6 +15,7 @@ from data_preprocessing import LaptopDataPreprocessor
 from evaluation_metrics import create_evaluator
 from user_satisfaction_system import create_satisfaction_system
 from evaluate_recommender_system import RecommenderSystemEvaluator
+from model_manager import get_model_manager, initialize_models
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +31,33 @@ df_rating = None
 evaluator = None
 satisfaction_system = None
 evaluation_results = None
+model_manager = None
 
 def initialize_system():
     """Initialize the recommendation system and load data."""
-    global recommender_system, df_laptop, df_rating, evaluator, satisfaction_system
+    global recommender_system, df_laptop, df_rating, evaluator, satisfaction_system, model_manager
     
     try:
         logger.info("Initializing Laptop Recommender System...")
+        
+        # Try to initialize the new model manager first
+        logger.info("Loading trained models from pickle files...")
+        if initialize_models():
+            model_manager = get_model_manager()
+            logger.info("✅ Model manager initialized successfully")
+            
+            # Get system status
+            status = model_manager.get_system_status()
+            logger.info(f"System status: {status}")
+            
+            if model_manager.is_ready():
+                logger.info("✅ All models loaded and ready for production")
+                return True
+            else:
+                logger.warning("⚠️ Models loaded but system not fully ready")
+        
+        # Fallback to legacy system if model manager fails
+        logger.info("Falling back to legacy system initialization...")
         
         # Initialize the main recommender system
         recommender_system = LaptopRecommenderSystem()
@@ -94,7 +115,7 @@ def initialize_system():
         # Initialize satisfaction system
         satisfaction_system = create_satisfaction_system()
         
-        logger.info("System initialized successfully!")
+        logger.info("Legacy system initialized successfully!")
         return True
         
     except Exception as e:
@@ -388,54 +409,20 @@ def recommend():
         session['user_preferences'] = preferences
         session['algorithm'] = algorithm
         
-        # Get recommendations
+        # Get recommendations using the unified function
         try:
-            if algorithm == 'content_based':
-                recommendations = get_recommendations(preferences)
-                recommendations = normalize_recommendations(recommendations)
-            elif algorithm == 'collaborative':
-                # Convert preferences to system format for collaborative filtering
-                query = {
-                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
-                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
-                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-                    'min_ram': preferences['ram_min'],
-                    'min_storage': preferences['storage_min'],
-                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
-                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
-                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
-                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
-                    'use_case': preferences['use_case'],
-                    'priority': preferences['priority']
-                }
-                # Use automatic popular recommendations (no user_id required)
-                recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
-                    preferences=query, n_recommendations=10
-                )
-                recommendations = normalize_recommendations(recommendations)
-            elif algorithm == 'hybrid':
-                # Convert preferences to system format for hybrid
-                query = {
-                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
-                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
-                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
-                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
-                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
-                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
-                    'min_ram': preferences['ram_min'],
-                    'min_storage': preferences['storage_min'],
-                    'use_case': preferences['use_case'],
-                    'priority': preferences['priority']
-                }
-                # Use automatic hybrid recommendations (no user_id required)
-                recommendations = recommender_system.get_hybrid_recommendations_auto(
-                    preferences=query, n_recommendations=10
-                )
-                recommendations = normalize_recommendations(recommendations)
-            else:
-                raise Exception(f'Unsupported algorithm: {algorithm}')
-            recommendations = get_recommendations(preferences)
+            # Get user ID from session if available (for collaborative filtering)
+            user_id = session.get('user_id')
+            
+            # Use the unified recommendation function
+            recommendations = get_recommendations(
+                preferences=preferences,
+                algorithm=algorithm,
+                user_id=user_id
+            )
+            
+            # Normalize recommendations for template compatibility
+            recommendations = normalize_recommendations(recommendations)
             
             # Add brand mapping to each laptop in recommendations
             for laptop in recommendations:
@@ -515,8 +502,60 @@ def api_recommend():
             'error': str(e)
         }), 500
 
-def get_recommendations(preferences: Dict) -> List[Dict]:
-    """Get personalized recommendations based on user preferences."""
+def get_recommendations(preferences: Dict, algorithm: str = "content_based", user_id: Optional[int] = None) -> List[Dict]:
+    """Get personalized recommendations based on user preferences using the model manager."""
+    global model_manager
+    
+    # Try to use the new model manager first
+    if model_manager and model_manager.is_ready():
+        try:
+            # Convert preferences to model manager format
+            model_preferences = {
+                'budget_range': (preferences.get('budget_min', 0), preferences.get('budget_max', 50000)),
+                'brand_preference': preferences.get('brand') if preferences.get('brand') else None,
+                'processor_preference': preferences.get('processor_type') if preferences.get('processor_type') else None,
+                'min_ram': preferences.get('ram_min', 4),
+                'min_storage': preferences.get('storage_min', 256),
+                'use_case': preferences.get('use_case', 'general'),
+                'priority': preferences.get('priority', 'performance')
+            }
+            
+            # Get recommendations from model manager
+            recommendations = model_manager.recommend(
+                user_id=user_id,
+                algorithm=algorithm,
+                top_n=50,
+                preferences=model_preferences
+            )
+            
+            # Process recommendations for web app compatibility
+            processed_recommendations = []
+            for rec in recommendations:
+                # Extract and process image URLs
+                rec['images'] = extract_image_urls(rec.get('images'))
+                rec['videos'] = extract_video_urls(rec.get('videos'), rec.get('title'), rec.get('brand'))
+                
+                # Convert numpy objects to Python native types
+                rec = convert_numpy_to_python(rec)
+                
+                # Ensure all required fields are present
+                rec.setdefault('laptop_id', rec.get('laptop_id', 0))
+                rec.setdefault('title_y', rec.get('title', 'Unknown'))
+                rec.setdefault('brand', rec.get('brand', 'Unknown Brand'))
+                rec.setdefault('price_myr', rec.get('price_myr', 0.0))
+                rec.setdefault('average_rating', rec.get('average_rating', 0.0))
+                rec.setdefault('rating_count', rec.get('rating_count', 0))
+                
+                processed_recommendations.append(rec)
+            
+            logger.info(f"✅ Generated {len(processed_recommendations)} recommendations using {algorithm}")
+            return processed_recommendations
+            
+        except Exception as e:
+            logger.error(f"Error with model manager: {e}")
+            # Fall back to legacy system
+    
+    # Fallback to legacy system
     if not recommender_system:
         raise Exception("Recommendation system not initialized")
     

@@ -39,7 +39,7 @@ class CollaborativeFiltering:
                 'n_components': 50,
                 'random_state': 42,
                 'max_iter': 200,
-                'alpha': 0.1
+                'alpha_W': 0.1
             },
             'similarity_methods': {
                 'min_common_items': 2,
@@ -203,7 +203,7 @@ class CollaborativeFiltering:
                     n_components=n_components,
                     random_state=self.config['matrix_factorization']['random_state'],
                     max_iter=self.config['matrix_factorization']['max_iter'],
-                    alpha=self.config['matrix_factorization']['alpha']
+                    alpha_W=self.config['matrix_factorization']['alpha_W']
                 )
                 self.user_factors = model.fit_transform(self.user_item_matrix)
                 self.item_factors = model.components_.T
@@ -740,6 +740,58 @@ class CollaborativeFiltering:
             
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
+            raise
+    
+    def save_model(self, filepath: str) -> None:
+        """Save the collaborative filtering model to a pickle file."""
+        try:
+            import pickle
+            import os
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            model_data = {
+                'user_item_matrix': self.user_item_matrix,
+                'user_similarity_matrix': self.user_similarity_matrix,
+                'item_similarity_matrix': self.item_similarity_matrix,
+                'user_factors': self.user_factors,
+                'item_factors': self.item_factors,
+                'config': self.config,
+                'df_laptop': self.df_laptop,
+                'df_rating': self.df_rating
+            }
+            
+            with open(filepath, 'wb') as f:
+                pickle.dump(model_data, f)
+            
+            logger.info(f"Collaborative filtering model saved to: {filepath}")
+            
+        except Exception as e:
+            logger.error(f"Error saving collaborative filtering model: {str(e)}")
+            raise
+    
+    def load_model(self, filepath: str) -> None:
+        """Load the collaborative filtering model from a pickle file."""
+        try:
+            import pickle
+            
+            with open(filepath, 'rb') as f:
+                model_data = pickle.load(f)
+            
+            self.user_item_matrix = model_data.get('user_item_matrix')
+            self.user_similarity_matrix = model_data.get('user_similarity_matrix')
+            self.item_similarity_matrix = model_data.get('item_similarity_matrix')
+            self.user_factors = model_data.get('user_factors')
+            self.item_factors = model_data.get('item_factors')
+            self.config = model_data.get('config', self.config)
+            self.df_laptop = model_data.get('df_laptop', self.df_laptop)
+            self.df_rating = model_data.get('df_rating', self.df_rating)
+            
+            logger.info(f"Collaborative filtering model loaded from: {filepath}")
+            
+        except Exception as e:
+            logger.error(f"Error loading collaborative filtering model: {str(e)}")
             raise
 
 
