@@ -15,6 +15,7 @@ from data_preprocessing import LaptopDataPreprocessor
 from evaluation_metrics import create_evaluator
 from user_satisfaction_system import create_satisfaction_system
 from evaluate_recommender_system import RecommenderSystemEvaluator
+from user_management import create_user_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,10 +31,11 @@ df_rating = None
 evaluator = None
 satisfaction_system = None
 evaluation_results = None
+user_manager = None
 
 def initialize_system():
     """Initialize the recommendation system and load data."""
-    global recommender_system, df_laptop, df_rating, evaluator, satisfaction_system
+    global recommender_system, df_laptop, df_rating, evaluator, satisfaction_system, user_manager
     
     try:
         logger.info("Initializing Laptop Recommender System...")
@@ -93,6 +95,9 @@ def initialize_system():
         
         # Initialize satisfaction system
         satisfaction_system = create_satisfaction_system()
+        
+        # Initialize user management system
+        user_manager = create_user_manager()
         
         logger.info("System initialized successfully!")
         return True
@@ -361,6 +366,11 @@ def index():
     """Main landing page with system overview and quick start options."""
     return render_template('index.html')
 
+@app.route('/user-management')
+def user_management():
+    """User management page for creating and selecting users."""
+    return render_template('user_management.html')
+
 @app.route('/recommend', methods=['GET', 'POST'])
 def recommend():
     """Main recommendation interface where users can input preferences."""
@@ -603,6 +613,8 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
 
 def get_rating_count_for_laptop(laptop_asin: str) -> int:
     """Get the number of ratings for a specific laptop."""
+    global df_rating
+    
     if df_rating is None or 'asin' not in df_rating.columns or not laptop_asin:
         return 0
     return len(df_rating[df_rating['asin'] == laptop_asin])
@@ -687,6 +699,8 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
 @app.route('/explore')
 def explore():
     """Explore page to browse laptops and get insights."""
+    global df_laptop
+    
     if df_laptop is None:
         flash('Data not loaded. Please try again.', 'error')
         return redirect(url_for('index'))
@@ -728,6 +742,8 @@ def explore():
 
 @app.route('/laptop/<int:laptop_id>')
 def laptop_detail(laptop_id):
+    global df_rating
+    
     # Get laptop data
     laptop = recommender_system.get_laptop_by_id(laptop_id)
     
@@ -807,6 +823,8 @@ def laptop_detail(laptop_id):
 @app.route('/laptop/<int:laptop_id>/ratings')
 def rating_details(laptop_id):
     """Rating details page showing all ratings for a specific laptop."""
+    global df_rating
+    
     # Get laptop data
     laptop = recommender_system.get_laptop_by_id(laptop_id)
     
@@ -862,6 +880,8 @@ def rating_details(laptop_id):
 @app.route('/search')
 def search():
     """Search functionality for laptops."""
+    global df_laptop
+    
     query = request.args.get('q', '')
     brand = request.args.get('brand', '')
     price_min = request.args.get('price_min', '')
@@ -924,6 +944,8 @@ def search():
 @app.route('/analytics')
 def analytics():
     """Analytics and insights page."""
+    global df_laptop, df_rating
+    
     if df_laptop is None or df_rating is None:
         flash('Data not loaded. Please try again.', 'error')
         return redirect(url_for('index'))
@@ -966,6 +988,8 @@ def analytics():
 @app.route('/api/stats')
 def api_stats():
     """API endpoint for getting system statistics."""
+    global df_laptop, df_rating
+    
     if df_laptop is None:
         return jsonify({'error': 'Data not loaded'}), 500
     
@@ -985,6 +1009,8 @@ def api_stats():
 @app.route('/api/load-more-laptops')
 def api_load_more_laptops():
     """API endpoint for loading more laptops with pagination."""
+    global df_laptop
+    
     if df_laptop is None:
         return jsonify({'error': 'Data not loaded'}), 500
     
@@ -1333,6 +1359,427 @@ def api_start_satisfaction_session():
             'success': False,
             'error': str(e)
         }), 500
+
+# User Management API Routes
+
+@app.route('/api/users', methods=['GET'])
+def api_list_users():
+    """API endpoint to list all users."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        users = user_manager.list_users(limit=100)
+        users_data = []
+        for user in users:
+            users_data.append({
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': user.created_at,
+                'last_active': user.last_active,
+                'total_views': user.total_views,
+                'total_ratings': user.total_ratings,
+                'total_comments': user.total_comments
+            })
+        
+        # Also include existing users from the rating dataset
+        # Check if df_rating is available globally
+        global df_rating
+        if df_rating is not None:
+            existing_users = user_manager.get_existing_users_from_ratings(df_rating)
+            for existing_user in existing_users:
+                users_data.append({
+                    'user_id': f"existing_{existing_user['user_id_encoded']}",
+                    'username': existing_user['username'],
+                    'email': None,
+                    'created_at': existing_user['first_rating'] or 'Unknown',
+                    'last_active': existing_user['last_rating'] or 'Unknown',
+                    'total_views': 0,
+                    'total_ratings': existing_user['total_ratings'],
+                    'total_comments': 0,
+                    'is_existing': True,
+                    'user_id_encoded': existing_user['user_id_encoded']
+                })
+        
+        return jsonify({
+            'success': True,
+            'users': users_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/search', methods=['GET'])
+def api_search_users():
+    """API endpoint to search users by userID or username."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        search_term = request.args.get('q', '').strip()
+        limit = int(request.args.get('limit', 50))
+        
+        if not search_term:
+            return jsonify({'success': False, 'error': 'Search term is required'}), 400
+        
+        # Search in the user database
+        users = user_manager.search_users(search_term, limit)
+        users_data = []
+        
+        for user in users:
+            users_data.append({
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': user.created_at,
+                'last_active': user.last_active,
+                'total_views': user.total_views,
+                'total_ratings': user.total_ratings,
+                'total_comments': user.total_comments,
+                'is_existing': False
+            })
+        
+        # Also search in existing users from rating dataset
+        if df_rating is not None:
+            existing_users = user_manager.get_existing_users_from_ratings(df_rating)
+            for existing_user in existing_users:
+                # Check if this existing user matches the search term
+                if (search_term.lower() in existing_user['username'].lower() or 
+                    search_term in str(existing_user['user_id_encoded'])):
+                    users_data.append({
+                        'user_id': f"existing_{existing_user['user_id_encoded']}",
+                        'username': existing_user['username'],
+                        'email': None,
+                        'created_at': existing_user.get('first_rating', ''),
+                        'last_active': existing_user.get('last_rating', ''),
+                        'total_views': 0,
+                        'total_ratings': existing_user['total_ratings'],
+                        'total_comments': 0,
+                        'is_existing': True,
+                        'user_id_encoded': existing_user['user_id_encoded']
+                    })
+        
+        return jsonify({
+            'success': True,
+            'users': users_data,
+            'search_term': search_term,
+            'total_found': len(users_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error searching users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users', methods=['POST'])
+def api_create_user():
+    """API endpoint to create a new user."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        username = data.get('username')
+        email = data.get('email')
+        
+        if not username:
+            return jsonify({'success': False, 'error': 'Username is required'}), 400
+        
+        # Check if username already exists
+        existing_user = user_manager.get_user_by_username(username)
+        if existing_user:
+            return jsonify({'success': False, 'error': 'Username already exists'}), 400
+        
+        user = user_manager.create_user(username=username, email=email)
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': user.created_at,
+                'last_active': user.last_active,
+                'total_views': user.total_views,
+                'total_ratings': user.total_ratings,
+                'total_comments': user.total_comments
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>', methods=['GET'])
+def api_get_user(user_id):
+    """API endpoint to get a specific user."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        user = user_manager.get_user(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': user.created_at,
+                'last_active': user.last_active,
+                'preferences': user.preferences,
+                'total_views': user.total_views,
+                'total_ratings': user.total_ratings,
+                'total_comments': user.total_comments
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/views', methods=['GET'])
+def api_get_user_views(user_id):
+    """API endpoint to get user's view history."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        views = user_manager.get_user_views(user_id, limit=50)
+        
+        return jsonify({
+            'success': True,
+            'views': views
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user views: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/ratings', methods=['GET'])
+def api_get_user_ratings(user_id):
+    """API endpoint to get user's rating history."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        ratings = user_manager.get_user_ratings(user_id, limit=50)
+        
+        return jsonify({
+            'success': True,
+            'ratings': ratings
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user ratings: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/ratings/<laptop_id>', methods=['GET'])
+def api_get_user_rating_for_laptop(user_id, laptop_id):
+    """API endpoint to get user's rating for a specific laptop."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        ratings = user_manager.get_user_ratings(user_id, limit=1000)  # Get all ratings
+        user_rating = None
+        
+        for rating in ratings:
+            if rating['laptop_id'] == int(laptop_id):
+                user_rating = rating
+                break
+        
+        if user_rating:
+            return jsonify({
+                'success': True,
+                'rating': user_rating
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'rating': None
+            })
+        
+    except Exception as e:
+        logger.error(f"Error getting user rating for laptop: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/ratings', methods=['POST'])
+def api_submit_user_rating(user_id, laptop_id=None):
+    """API endpoint to submit a user rating."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        laptop_id = data.get('laptop_id')
+        rating = data.get('rating')
+        comment = data.get('comment', '')
+        
+        if not laptop_id or not rating:
+            return jsonify({'success': False, 'error': 'laptop_id and rating are required'}), 400
+        
+        # Track the rating behavior
+        behavior_id = user_manager.track_behavior(
+            user_id=user_id,
+            laptop_id=int(laptop_id),
+            behavior_type='rating',
+            data={'rating': float(rating), 'comment': comment}
+        )
+        
+        return jsonify({
+            'success': True,
+            'behavior_id': behavior_id,
+            'message': 'Rating submitted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error submitting user rating: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/behavior', methods=['POST'])
+def api_track_user_behavior(user_id):
+    """API endpoint to track user behavior."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        laptop_id = data.get('laptop_id')
+        behavior_type = data.get('behavior_type')
+        behavior_data = data.get('data', {})
+        
+        if not laptop_id or not behavior_type:
+            return jsonify({'success': False, 'error': 'laptop_id and behavior_type are required'}), 400
+        
+        behavior_id = user_manager.track_behavior(
+            user_id=user_id,
+            laptop_id=int(laptop_id),
+            behavior_type=behavior_type,
+            data=behavior_data
+        )
+        
+        return jsonify({
+            'success': True,
+            'behavior_id': behavior_id,
+            'message': 'Behavior tracked successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error tracking user behavior: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/behavior', methods=['GET'])
+def api_get_user_behavior(user_id):
+    """API endpoint to get user's behavior history."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        behavior_type = request.args.get('type')
+        behaviors = user_manager.get_user_behavior_history(user_id, behavior_type, limit=100)
+        
+        return jsonify({
+            'success': True,
+            'behaviors': behaviors
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user behavior: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/preferences', methods=['PUT'])
+def api_update_user_preferences(user_id):
+    """API endpoint to update user preferences."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        user_manager.update_user_preferences(user_id, data)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Preferences updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating user preferences: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/statistics', methods=['GET'])
+def api_get_user_statistics(user_id):
+    """API endpoint to get user statistics."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        stats = user_manager.get_user_statistics(user_id)
+        
+        return jsonify({
+            'success': True,
+            'statistics': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user statistics: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/create-from-existing', methods=['POST'])
+def api_create_user_from_existing():
+    """API endpoint to create a user profile from an existing user in the rating dataset."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        user_id_encoded = data.get('user_id_encoded')
+        username = data.get('username')
+        
+        if not user_id_encoded:
+            return jsonify({'success': False, 'error': 'user_id_encoded is required'}), 400
+        
+        if not username:
+            username = f"User_{user_id_encoded}"
+        
+        # Create user profile from existing user
+        user = user_manager.create_user_from_existing(user_id_encoded, username)
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': user.created_at,
+                'last_active': user.last_active,
+                'total_views': user.total_views,
+                'total_ratings': user.total_ratings,
+                'total_comments': user.total_comments
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating user from existing: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):

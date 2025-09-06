@@ -1,0 +1,1144 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-users"></i> User Management
+            </h1>
+            
+            <!-- User Selection/Creation Section -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-plus"></i> Select or Create User
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Create New User -->
+                        <div class="col-md-6">
+                            <h6>Create New User</h6>
+                            <form id="createUserForm">
+                                <div class="form-group">
+                                    <label for="newUsername">Username</label>
+                                    <input type="text" class="form-control" id="newUsername" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="newEmail">Email (Optional)</label>
+                                    <input type="email" class="form-control" id="newEmail">
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Create User
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <!-- Select Existing User -->
+                        <div class="col-md-6">
+                            <h6>Select Existing User</h6>
+                            <form id="selectUserForm">
+                                <div class="form-group">
+                                    <label for="userSearch">Search Users</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="userSearch" placeholder="Search by User ID or Username...">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <small class="form-text text-muted" id="searchResultsInfo">
+                                        Type to filter users by ID, username, or email
+                                    </small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="existingUsers">Choose User</label>
+                                    <select class="form-control" id="existingUsers" required>
+                                        <option value="">Select a user...</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-sign-in-alt"></i> Select User
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Current User Info -->
+            <div id="currentUserInfo" class="card mb-4" style="display: none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user"></i> Current User
+                    </h5>
+                    <button id="logoutUser" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6 id="currentUsername"></h6>
+                            <p class="text-muted mb-1">
+                                <strong>User ID:</strong> <span id="currentUserId"></span>
+                            </p>
+                            <p class="text-muted mb-1">
+                                <strong>Email:</strong> <span id="currentUserEmail"></span>
+                            </p>
+                            <p class="text-muted mb-1">
+                                <strong>Member since:</strong> <span id="currentUserCreated"></span>
+                            </p>
+                            <p class="text-muted mb-0">
+                                <strong>Last active:</strong> <span id="currentUserLastActive"></span>
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="stat-box">
+                                        <h4 id="totalViews" class="text-primary">0</h4>
+                                        <small>Views</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="stat-box">
+                                        <h4 id="totalRatings" class="text-success">0</h4>
+                                        <small>Ratings</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="stat-box">
+                                        <h4 id="totalComments" class="text-info">0</h4>
+                                        <small>Comments</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- User Activity Tabs -->
+            <div id="userActivityTabs" style="display: none;">
+                <ul class="nav nav-tabs" id="activityTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="views-tab" data-toggle="tab" href="#views" role="tab">
+                            <i class="fas fa-eye"></i> View History
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="ratings-tab" data-toggle="tab" href="#ratings" role="tab">
+                            <i class="fas fa-star"></i> Ratings & Reviews
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="behavior-tab" data-toggle="tab" href="#behavior" role="tab">
+                            <i class="fas fa-chart-line"></i> Activity History
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="preferences-tab" data-toggle="tab" href="#preferences" role="tab">
+                            <i class="fas fa-cog"></i> Preferences
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="tab-content" id="activityTabContent">
+                    <!-- View History Tab -->
+                    <div class="tab-pane fade show active" id="views" role="tabpanel">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>Recently Viewed Laptops</h6>
+                                <div id="viewHistory">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading view history...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Ratings Tab -->
+                    <div class="tab-pane fade" id="ratings" role="tabpanel">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>Your Ratings & Reviews</h6>
+                                <div id="ratingHistory">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading rating history...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Activity History Tab -->
+                    <div class="tab-pane fade" id="behavior" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">Complete Activity History</h6>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary active" onclick="filterBehavior('all')">All</button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="filterBehavior('view')">Views</button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="filterBehavior('rating')">Ratings</button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="filterBehavior('comment')">Comments</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="behaviorHistory">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading activity history...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Preferences Tab -->
+                    <div class="tab-pane fade" id="preferences" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">User Preferences</h6>
+                            </div>
+                            <div class="card-body">
+                                <form id="preferencesForm">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Budget & Performance</h6>
+                                            <div class="form-group">
+                                                <label for="prefBudget">Preferred Budget Range (MYR)</label>
+                                                <div class="row">
+                                                    <div class="col-6">
+                                                        <input type="number" class="form-control" id="prefBudgetMin" placeholder="Min" min="0">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <input type="number" class="form-control" id="prefBudgetMax" placeholder="Max" min="0">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="prefPriority">Priority</label>
+                                                <select class="form-control" id="prefPriority">
+                                                    <option value="">Select priority...</option>
+                                                    <option value="performance">Performance</option>
+                                                    <option value="price">Price</option>
+                                                    <option value="battery">Battery Life</option>
+                                                    <option value="portability">Portability</option>
+                                                    <option value="display">Display Quality</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Brand & Specifications</h6>
+                                            <div class="form-group">
+                                                <label for="prefBrand">Preferred Brand</label>
+                                                <input type="text" class="form-control" id="prefBrand" placeholder="e.g., Dell, HP, Apple">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="prefProcessor">Preferred Processor</label>
+                                                <select class="form-control" id="prefProcessor">
+                                                    <option value="">Any processor...</option>
+                                                    <option value="intel">Intel</option>
+                                                    <option value="amd">AMD</option>
+                                                    <option value="apple">Apple M-series</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Use Case & Requirements</h6>
+                                            <div class="form-group">
+                                                <label for="prefUseCase">Primary Use Case</label>
+                                                <select class="form-control" id="prefUseCase">
+                                                    <option value="">Select use case...</option>
+                                                    <option value="gaming">Gaming</option>
+                                                    <option value="work">Work/Business</option>
+                                                    <option value="student">Student</option>
+                                                    <option value="creative">Creative/Design</option>
+                                                    <option value="general">General Use</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="prefRAM">Minimum RAM (GB)</label>
+                                                <select class="form-control" id="prefRAM">
+                                                    <option value="">Any amount...</option>
+                                                    <option value="4">4 GB</option>
+                                                    <option value="8">8 GB</option>
+                                                    <option value="16">16 GB</option>
+                                                    <option value="32">32 GB</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Display & Portability</h6>
+                                            <div class="form-group">
+                                                <label for="prefScreenSize">Screen Size</label>
+                                                <select class="form-control" id="prefScreenSize">
+                                                    <option value="">Any size...</option>
+                                                    <option value="13">13 inches</option>
+                                                    <option value="14">14 inches</option>
+                                                    <option value="15">15 inches</option>
+                                                    <option value="17">17 inches</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="prefWeight">Weight Preference</label>
+                                                <select class="form-control" id="prefWeight">
+                                                    <option value="">Any weight...</option>
+                                                    <option value="light">Light (< 1.5 kg)</option>
+                                                    <option value="medium">Medium (1.5-2.5 kg)</option>
+                                                    <option value="heavy">Heavy (> 2.5 kg)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <hr>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Additional Preferences</h6>
+                                            <div class="form-group">
+                                                <label for="prefGPU">GPU Requirement</label>
+                                                <select class="form-control" id="prefGPU">
+                                                    <option value="">Any GPU...</option>
+                                                    <option value="integrated">Integrated Graphics</option>
+                                                    <option value="dedicated">Dedicated Graphics</option>
+                                                    <option value="gaming">Gaming GPU</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="prefStorage">Storage Type</label>
+                                                <select class="form-control" id="prefStorage">
+                                                    <option value="">Any storage...</option>
+                                                    <option value="hdd">HDD</option>
+                                                    <option value="ssd">SSD</option>
+                                                    <option value="nvme">NVMe SSD</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary mb-3">Notification Preferences</h6>
+                                            <div class="form-group">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="prefEmailNotifications">
+                                                    <label class="form-check-label" for="prefEmailNotifications">
+                                                        Email notifications for new recommendations
+                                                    </label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="prefPriceAlerts">
+                                                    <label class="form-check-label" for="prefPriceAlerts">
+                                                        Price drop alerts for saved laptops
+                                                    </label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="prefNewLaptops">
+                                                    <label class="form-check-label" for="prefNewLaptops">
+                                                        Notifications for new laptops matching preferences
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="text-center mt-4">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-save"></i> Save Preferences
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-lg ml-2" onclick="resetPreferences()">
+                                            <i class="fas fa-undo"></i> Reset to Defaults
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stat-box {
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+.stat-box h4 {
+    margin: 0;
+    font-weight: bold;
+}
+
+.laptop-item {
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.laptop-item:hover {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.rating-stars {
+    color: #ffc107;
+}
+
+.behavior-item {
+    border-left: 4px solid #007bff;
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #f8f9fa;
+}
+
+.behavior-item.rating {
+    border-left-color: #28a745;
+}
+
+.behavior-item.view {
+    border-left-color: #17a2b8;
+}
+
+.behavior-item.comment {
+    border-left-color: #ffc107;
+}
+
+.comment-box {
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+}
+
+.laptop-item h6 {
+    color: #007bff;
+    font-weight: 600;
+}
+
+.rating-stars {
+    font-size: 1.1em;
+}
+
+.btn-group .btn.active {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+.preferences-section {
+    border-left: 3px solid #007bff;
+    padding-left: 15px;
+    margin-bottom: 20px;
+}
+
+.form-check-label {
+    font-size: 0.9em;
+    color: #6c757d;
+}
+
+.stat-box {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    transition: all 0.3s ease;
+}
+
+.stat-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+</style>
+
+<script>
+let currentUser = null;
+let allUsers = []; // Store all users for filtering
+
+// Load existing users on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadExistingUsers();
+    
+    // Form event listeners
+    document.getElementById('createUserForm').addEventListener('submit', createUser);
+    document.getElementById('selectUserForm').addEventListener('submit', selectUser);
+    document.getElementById('logoutUser').addEventListener('click', logoutUser);
+    document.getElementById('preferencesForm').addEventListener('submit', savePreferences);
+    
+    // Search functionality
+    document.getElementById('userSearch').addEventListener('input', filterUsers);
+    document.getElementById('clearSearch').addEventListener('click', clearSearch);
+});
+
+function loadExistingUsers() {
+    fetch('/api/users')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.users) {
+                // Store all users for filtering
+                allUsers = data.users;
+                
+                // Populate dropdown with all users
+                populateUserDropdown(allUsers);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading users:', error);
+        });
+}
+
+function populateUserDropdown(users) {
+    const select = document.getElementById('existingUsers');
+    select.innerHTML = '<option value="">Select a user...</option>';
+    
+    if (users.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No users found';
+        option.disabled = true;
+        select.appendChild(option);
+        return;
+    }
+    
+    users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.user_id;
+        
+        let displayText = `${user.username}`;
+        if (user.is_existing) {
+            displayText += ` (Existing user - ${user.total_ratings} ratings)`;
+            option.setAttribute('data-is-existing', 'true');
+            option.setAttribute('data-user-id-encoded', user.user_id_encoded);
+        } else {
+            displayText += ` (${user.total_views} views, ${user.total_ratings} ratings)`;
+        }
+        
+        option.textContent = displayText;
+        select.appendChild(option);
+    });
+}
+
+function filterUsers() {
+    const searchTerm = document.getElementById('userSearch').value.toLowerCase().trim();
+    const searchInfo = document.getElementById('searchResultsInfo');
+    
+    if (searchTerm === '') {
+        // Show all users if search is empty
+        populateUserDropdown(allUsers);
+        searchInfo.textContent = 'Type to filter users by ID, username, or email';
+        searchInfo.className = 'form-text text-muted';
+    } else {
+        // Filter users based on search term
+        const filteredUsers = allUsers.filter(user => {
+            const username = user.username.toLowerCase();
+            const userId = user.user_id.toLowerCase();
+            const userEncodedId = user.user_id_encoded ? user.user_id_encoded.toString() : '';
+            
+            return username.includes(searchTerm) || 
+                   userId.includes(searchTerm) || 
+                   userEncodedId.includes(searchTerm);
+        });
+        
+        populateUserDropdown(filteredUsers);
+        
+        // Update search info
+        if (filteredUsers.length === 0) {
+            searchInfo.textContent = 'No users found matching your search';
+            searchInfo.className = 'form-text text-warning';
+        } else {
+            searchInfo.textContent = `Found ${filteredUsers.length} user(s) matching "${searchTerm}"`;
+            searchInfo.className = 'form-text text-success';
+        }
+    }
+}
+
+function clearSearch() {
+    document.getElementById('userSearch').value = '';
+    populateUserDropdown(allUsers);
+    
+    // Reset search info
+    const searchInfo = document.getElementById('searchResultsInfo');
+    searchInfo.textContent = 'Type to filter users by ID, username, or email';
+    searchInfo.className = 'form-text text-muted';
+}
+
+function createUser(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('newUsername').value;
+    const email = document.getElementById('newEmail').value;
+    
+    fetch('/api/users', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            username: username,
+            email: email
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('User created successfully!');
+            document.getElementById('createUserForm').reset();
+            loadExistingUsers();
+            // Auto-select the new user
+            selectUserById(data.user.user_id);
+        } else {
+            alert('Error creating user: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error creating user:', error);
+        alert('Error creating user');
+    });
+}
+
+function selectUser(event) {
+    event.preventDefault();
+    
+    const userId = document.getElementById('existingUsers').value;
+    if (userId) {
+        selectUserById(userId);
+    }
+}
+
+function selectUserById(userId) {
+    // Check if this is an existing user from the rating dataset
+    const select = document.getElementById('existingUsers');
+    const selectedOption = select.querySelector(`option[value="${userId}"]`);
+    
+    if (selectedOption && selectedOption.getAttribute('data-is-existing') === 'true') {
+        // Create user profile from existing user
+        const user_id_encoded = selectedOption.getAttribute('data-user-id-encoded');
+        const username = selectedOption.textContent.split(' (')[0];
+        
+        fetch('/api/users/create-from-existing', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id_encoded: user_id_encoded,
+                username: username
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUser = data.user;
+                displayCurrentUser();
+                loadUserActivity();
+                loadExistingUsers(); // Refresh the user list
+            } else {
+                alert('Error creating user profile: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error creating user profile:', error);
+            alert('Error creating user profile');
+        });
+    } else {
+        // Regular user selection
+        fetch(`/api/users/${userId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentUser = data.user;
+                    displayCurrentUser();
+                    loadUserActivity();
+                } else {
+                    alert('Error loading user: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading user:', error);
+                alert('Error loading user');
+            });
+    }
+}
+
+function displayCurrentUser() {
+    if (!currentUser) return;
+    
+    document.getElementById('currentUsername').textContent = currentUser.username;
+    document.getElementById('currentUserId').textContent = currentUser.user_id;
+    document.getElementById('currentUserEmail').textContent = currentUser.email || 'Not provided';
+    document.getElementById('currentUserCreated').textContent = new Date(currentUser.created_at).toLocaleDateString();
+    document.getElementById('currentUserLastActive').textContent = new Date(currentUser.last_active).toLocaleDateString();
+    document.getElementById('totalViews').textContent = currentUser.total_views;
+    document.getElementById('totalRatings').textContent = currentUser.total_ratings;
+    document.getElementById('totalComments').textContent = currentUser.total_comments;
+    
+    document.getElementById('currentUserInfo').style.display = 'block';
+    document.getElementById('userActivityTabs').style.display = 'block';
+    
+    // Save current user to localStorage for other pages
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    window.currentUserId = currentUser.user_id;
+}
+
+function loadUserActivity() {
+    if (!currentUser) return;
+    
+    loadViewHistory();
+    loadRatingHistory();
+    loadBehaviorHistory();
+    loadUserPreferences();
+}
+
+function loadViewHistory() {
+    fetch(`/api/users/${currentUser.user_id}/views`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('viewHistory');
+            
+            if (data.success && data.views.length > 0) {
+                // Load laptop details for each view
+                const laptopPromises = data.views.map(view => 
+                    fetch(`/api/laptop/${view.laptop_id}`)
+                        .then(response => response.json())
+                        .then(laptopData => ({ view, laptop: laptopData }))
+                        .catch(() => ({ view, laptop: null }))
+                );
+                
+                Promise.all(laptopPromises)
+                    .then(results => {
+                        container.innerHTML = results.map(({ view, laptop }) => `
+                            <div class="laptop-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">
+                                            ${laptop && laptop.success ? laptop.laptop.title_y || `Laptop ID: ${view.laptop_id}` : `Laptop ID: ${view.laptop_id}`}
+                                        </h6>
+                                        ${laptop && laptop.success ? `
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <small class="text-muted">
+                                                        <strong>Brand:</strong> ${laptop.laptop.brand || 'Unknown'}<br>
+                                                        <strong>Price:</strong> MYR ${laptop.laptop.price_myr || 'N/A'}<br>
+                                                        <strong>Rating:</strong> ${laptop.laptop.average_rating || 'N/A'}/5
+                                                    </small>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <small class="text-muted">
+                                                        <strong>Views:</strong> ${view.view_count} time(s)<br>
+                                                        <strong>First viewed:</strong> ${new Date(view.first_viewed).toLocaleDateString()}<br>
+                                                        <strong>Last viewed:</strong> ${new Date(view.last_viewed).toLocaleString()}
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        ` : `
+                                            <small class="text-muted">
+                                                Viewed ${view.view_count} time(s) | 
+                                                Last viewed: ${new Date(view.last_viewed).toLocaleString()}
+                                            </small>
+                                        `}
+                                    </div>
+                                    <div class="ml-3">
+                                        <a href="/laptop/${view.laptop_id}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View Again
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    })
+                    .catch(error => {
+                        console.error('Error loading laptop details:', error);
+                        // Fallback to simple display
+                        container.innerHTML = data.views.map(view => `
+                            <div class="laptop-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6>Laptop ID: ${view.laptop_id}</h6>
+                                        <small class="text-muted">
+                                            Viewed ${view.view_count} time(s) | 
+                                            Last viewed: ${new Date(view.last_viewed).toLocaleString()}
+                                        </small>
+                                    </div>
+                                    <a href="/laptop/${view.laptop_id}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View Again
+                                    </a>
+                                </div>
+                            </div>
+                        `).join('');
+                    });
+            } else {
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-eye-slash"></i><br>No view history found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading view history:', error);
+            document.getElementById('viewHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading view history.</div>';
+        });
+}
+
+function loadRatingHistory() {
+    fetch(`/api/users/${currentUser.user_id}/ratings`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('ratingHistory');
+            
+            if (data.success && data.ratings.length > 0) {
+                // Load laptop details for each rating
+                const laptopPromises = data.ratings.map(rating => 
+                    fetch(`/api/laptop/${rating.laptop_id}`)
+                        .then(response => response.json())
+                        .then(laptopData => ({ rating, laptop: laptopData }))
+                        .catch(() => ({ rating, laptop: null }))
+                );
+                
+                Promise.all(laptopPromises)
+                    .then(results => {
+                        container.innerHTML = results.map(({ rating, laptop }) => `
+                            <div class="laptop-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">
+                                            ${laptop && laptop.success ? laptop.laptop.title_y || `Laptop ID: ${rating.laptop_id}` : `Laptop ID: ${rating.laptop_id}`}
+                                        </h6>
+                                        <div class="rating-stars mb-2">
+                                            ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
+                                            <span class="ml-2 font-weight-bold">${rating.rating}/5</span>
+                                        </div>
+                                        ${rating.comment ? `
+                                            <div class="comment-box p-2 bg-light rounded mb-2">
+                                                <small class="text-muted">Your review:</small>
+                                                <p class="mb-0">"${rating.comment}"</p>
+                                            </div>
+                                        ` : ''}
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <small class="text-muted">
+                                                    <strong>Brand:</strong> ${laptop && laptop.success ? laptop.laptop.brand || 'Unknown' : 'Unknown'}<br>
+                                                    <strong>Price:</strong> MYR ${laptop && laptop.success ? laptop.laptop.price_myr || 'N/A' : 'N/A'}<br>
+                                                    <strong>Overall Rating:</strong> ${laptop && laptop.success ? laptop.laptop.average_rating || 'N/A' : 'N/A'}/5
+                                                </small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <small class="text-muted">
+                                                    <strong>Your Rating:</strong> ${rating.rating}/5<br>
+                                                    <strong>Rated on:</strong> ${new Date(rating.timestamp).toLocaleDateString()}<br>
+                                                    <strong>Time:</strong> ${new Date(rating.timestamp).toLocaleTimeString()}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ml-3">
+                                        <a href="/laptop/${rating.laptop_id}" class="btn btn-sm btn-outline-primary mb-1">
+                                            <i class="fas fa-eye"></i> View Laptop
+                                        </a>
+                                        <br>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="editRating(${rating.laptop_id}, ${rating.rating}, '${rating.comment || ''}')">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    })
+                    .catch(error => {
+                        console.error('Error loading laptop details:', error);
+                        // Fallback to simple display
+                        container.innerHTML = data.ratings.map(rating => `
+                            <div class="laptop-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6>Laptop ID: ${rating.laptop_id}</h6>
+                                        <div class="rating-stars">
+                                            ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
+                                            <span class="ml-2">${rating.rating}/5</span>
+                                        </div>
+                                        ${rating.comment ? `<p class="mt-2 mb-0">"${rating.comment}"</p>` : ''}
+                                        <small class="text-muted">
+                                            Rated on: ${new Date(rating.timestamp).toLocaleString()}
+                                        </small>
+                                    </div>
+                                    <a href="/laptop/${rating.laptop_id}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View Laptop
+                                    </a>
+                                </div>
+                            </div>
+                        `).join('');
+                    });
+            } else {
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-star"></i><br>No ratings found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading rating history:', error);
+            document.getElementById('ratingHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading rating history.</div>';
+        });
+}
+
+let allBehaviors = []; // Store all behaviors for filtering
+
+function loadBehaviorHistory() {
+    fetch(`/api/users/${currentUser.user_id}/behavior`)
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('behaviorHistory');
+            
+            if (data.success && data.behaviors.length > 0) {
+                allBehaviors = data.behaviors;
+                displayBehaviors(allBehaviors);
+            } else {
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-chart-line"></i><br>No activity history found.</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading behavior history:', error);
+            document.getElementById('behaviorHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading activity history.</div>';
+        });
+}
+
+function displayBehaviors(behaviors) {
+    const container = document.getElementById('behaviorHistory');
+    
+    if (behaviors.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted">No activities found for the selected filter.</div>';
+        return;
+    }
+    
+    // Sort by timestamp (newest first)
+    const sortedBehaviors = behaviors.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    container.innerHTML = sortedBehaviors.map(behavior => {
+        const behaviorIcon = getBehaviorIcon(behavior.behavior_type);
+        const behaviorColor = getBehaviorColor(behavior.behavior_type);
+        
+        return `
+            <div class="behavior-item ${behavior.behavior_type}" data-behavior-type="${behavior.behavior_type}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-1">
+                            <i class="fas ${behaviorIcon} mr-2" style="color: ${behaviorColor}"></i>
+                            <strong>${behavior.behavior_type.charAt(0).toUpperCase() + behavior.behavior_type.slice(1)}</strong>
+                            <span class="text-muted ml-2">on Laptop ID: ${behavior.laptop_id}</span>
+                        </div>
+                        ${behavior.data.rating ? `
+                            <div class="rating-stars mb-1">
+                                ${'★'.repeat(Math.floor(behavior.data.rating))}${'☆'.repeat(5 - Math.floor(behavior.data.rating))}
+                                <span class="ml-2">${behavior.data.rating}/5</span>
+                            </div>
+                        ` : ''}
+                        ${behavior.data.comment ? `
+                            <div class="comment-box p-2 bg-light rounded mb-1">
+                                <small class="text-muted">Comment:</small>
+                                <p class="mb-0">"${behavior.data.comment}"</p>
+                            </div>
+                        ` : ''}
+                        ${behavior.data.page ? `<small class="text-muted">Page: ${behavior.data.page}</small>` : ''}
+                    </div>
+                    <div class="ml-3 text-right">
+                        <small class="text-muted">
+                            ${new Date(behavior.timestamp).toLocaleDateString()}<br>
+                            ${new Date(behavior.timestamp).toLocaleTimeString()}
+                        </small>
+                        <br>
+                        <a href="/laptop/${behavior.laptop_id}" class="btn btn-sm btn-outline-primary mt-1">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getBehaviorIcon(type) {
+    const icons = {
+        'view': 'fa-eye',
+        'rating': 'fa-star',
+        'comment': 'fa-comment',
+        'like': 'fa-thumbs-up',
+        'dislike': 'fa-thumbs-down'
+    };
+    return icons[type] || 'fa-circle';
+}
+
+function getBehaviorColor(type) {
+    const colors = {
+        'view': '#17a2b8',
+        'rating': '#28a745',
+        'comment': '#ffc107',
+        'like': '#007bff',
+        'dislike': '#dc3545'
+    };
+    return colors[type] || '#6c757d';
+}
+
+function filterBehavior(type) {
+    // Update button states
+    document.querySelectorAll('#behavior .btn-group button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Filter behaviors
+    if (type === 'all') {
+        displayBehaviors(allBehaviors);
+    } else {
+        const filtered = allBehaviors.filter(behavior => behavior.behavior_type === type);
+        displayBehaviors(filtered);
+    }
+}
+
+function loadUserPreferences() {
+    if (currentUser.preferences) {
+        // Budget & Performance
+        document.getElementById('prefBudgetMin').value = currentUser.preferences.budget_min || '';
+        document.getElementById('prefBudgetMax').value = currentUser.preferences.budget_max || '';
+        document.getElementById('prefPriority').value = currentUser.preferences.priority || '';
+        
+        // Brand & Specifications
+        document.getElementById('prefBrand').value = currentUser.preferences.brand || '';
+        document.getElementById('prefProcessor').value = currentUser.preferences.processor || '';
+        
+        // Use Case & Requirements
+        document.getElementById('prefUseCase').value = currentUser.preferences.use_case || '';
+        document.getElementById('prefRAM').value = currentUser.preferences.ram_min || '';
+        
+        // Display & Portability
+        document.getElementById('prefScreenSize').value = currentUser.preferences.screen_size || '';
+        document.getElementById('prefWeight').value = currentUser.preferences.weight_preference || '';
+        
+        // Additional Preferences
+        document.getElementById('prefGPU').value = currentUser.preferences.gpu_requirement || '';
+        document.getElementById('prefStorage').value = currentUser.preferences.storage_type || '';
+        
+        // Notification Preferences
+        document.getElementById('prefEmailNotifications').checked = currentUser.preferences.email_notifications || false;
+        document.getElementById('prefPriceAlerts').checked = currentUser.preferences.price_alerts || false;
+        document.getElementById('prefNewLaptops').checked = currentUser.preferences.new_laptop_notifications || false;
+    }
+}
+
+function savePreferences(event) {
+    event.preventDefault();
+    
+    if (!currentUser) return;
+    
+    const preferences = {
+        // Budget & Performance
+        budget_min: document.getElementById('prefBudgetMin').value,
+        budget_max: document.getElementById('prefBudgetMax').value,
+        priority: document.getElementById('prefPriority').value,
+        
+        // Brand & Specifications
+        brand: document.getElementById('prefBrand').value,
+        processor: document.getElementById('prefProcessor').value,
+        
+        // Use Case & Requirements
+        use_case: document.getElementById('prefUseCase').value,
+        ram_min: document.getElementById('prefRAM').value,
+        
+        // Display & Portability
+        screen_size: document.getElementById('prefScreenSize').value,
+        weight_preference: document.getElementById('prefWeight').value,
+        
+        // Additional Preferences
+        gpu_requirement: document.getElementById('prefGPU').value,
+        storage_type: document.getElementById('prefStorage').value,
+        
+        // Notification Preferences
+        email_notifications: document.getElementById('prefEmailNotifications').checked,
+        price_alerts: document.getElementById('prefPriceAlerts').checked,
+        new_laptop_notifications: document.getElementById('prefNewLaptops').checked
+    };
+    
+    fetch(`/api/users/${currentUser.user_id}/preferences`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(preferences)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Preferences saved successfully!');
+            currentUser.preferences = preferences;
+        } else {
+            alert('Error saving preferences: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving preferences:', error);
+        alert('Error saving preferences');
+    });
+}
+
+function resetPreferences() {
+    if (confirm('Are you sure you want to reset all preferences to default values?')) {
+        // Reset all form fields
+        document.getElementById('preferencesForm').reset();
+        
+        // Clear current user preferences
+        if (currentUser) {
+            currentUser.preferences = {};
+        }
+        
+        alert('Preferences reset to defaults!');
+    }
+}
+
+function editRating(laptopId, currentRating, currentComment) {
+    const newRating = prompt('Enter new rating (1-5):', currentRating);
+    if (newRating && newRating >= 1 && newRating <= 5) {
+        const newComment = prompt('Enter new comment (optional):', currentComment);
+        
+        const ratingData = {
+            rating: parseFloat(newRating),
+            comment: newComment || ''
+        };
+        
+        fetch(`/api/users/${currentUser.user_id}/ratings/${laptopId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(ratingData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Rating updated successfully!');
+                loadRatingHistory(); // Reload the rating history
+            } else {
+                alert('Error updating rating: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error updating rating:', error);
+            alert('Error updating rating');
+        });
+    }
+}
+
+function logoutUser() {
+    currentUser = null;
+    document.getElementById('currentUserInfo').style.display = 'none';
+    document.getElementById('userActivityTabs').style.display = 'none';
+    document.getElementById('selectUserForm').reset();
+    
+    // Clear current user from localStorage
+    localStorage.removeItem('currentUser');
+    window.currentUserId = null;
+}
+</script>
+{% endblock %}

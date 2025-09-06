@@ -308,11 +308,11 @@ class LaptopDataPreprocessor:
         if 'helpful_vote' in df_normalized.columns:
             df_normalized['helpful_vote'] = df_normalized['helpful_vote'].fillna(0).astype(int)
         
-        # 2. Encode user_id
+        # 2. Preserve original user_id format (no encoding needed for string IDs)
         if 'user_id' in df_normalized.columns:
-            le = LabelEncoder()
-            df_normalized['user_id_encoded'] = le.fit_transform(df_normalized['user_id'].fillna('unknown'))
-            self.label_encoders['rating_user_id'] = le
+            # Keep original user_id as user_id_encoded for compatibility with existing code
+            df_normalized['user_id_encoded'] = df_normalized['user_id'].fillna('unknown')
+            logger.info(f"Preserved original user_id format. Sample IDs: {df_normalized['user_id_encoded'].head(3).tolist()}")
         
         # 3. Clean text columns
         text_columns = ['title_x', 'text']
@@ -347,18 +347,81 @@ class LaptopDataPreprocessor:
             df_normalized['month'] = df_normalized['timestamp'].apply(lambda x: int(x.split('/')[1]) if pd.notna(x) else None)
             df_normalized['day_of_week'] = df_normalized['timestamp'].apply(lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M').dayofweek if pd.notna(x) else None)
         
-        # 5. Keep only essential columns and cleaned versions
+        # 5. Add user activity counts (views, ratings, comments)
+        logger.info("Adding user activity counts...")
+        df_normalized = self._add_user_activity_counts(df_normalized)
+        
+        # 6. Keep only essential columns and cleaned versions
         essential_columns = ['asin', 'parent_asin', 'user_id_encoded', 'timestamp', 'rating', 'helpful_vote']
         clean_columns = [col for col in df_normalized.columns if col.endswith('_clean')]
         temporal_columns = ['year', 'month', 'day_of_week']
+        activity_columns = ['user_views_count', 'user_ratings_count', 'user_comments_count']
         
-        final_columns = essential_columns + clean_columns + temporal_columns
+        final_columns = essential_columns + clean_columns + temporal_columns + activity_columns
         available_final_columns = [col for col in final_columns if col in df_normalized.columns]
         
         df_final = df_normalized[available_final_columns]
         
         logger.info("Rating data normalization completed")
         return df_final
+
+    def _add_user_activity_counts(self, df_rating: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add user activity counts (views, ratings, comments) to the rating dataframe.
+        
+        Args:
+            df_rating (pd.DataFrame): Rating dataframe with user_id_encoded column
+            
+        Returns:
+            pd.DataFrame: Rating dataframe with added user activity counts
+        """
+        logger.info("Calculating user activity counts...")
+        
+        df_with_counts = df_rating.copy()
+        
+        # Ensure user_id_encoded exists
+        if 'user_id_encoded' not in df_with_counts.columns:
+            logger.warning("user_id_encoded column not found, skipping user activity counts")
+            return df_with_counts
+        
+        # Calculate user activity counts
+        user_activity = df_with_counts.groupby('user_id_encoded').agg({
+            'rating': 'count',  # Count of ratings per user
+            'text': lambda x: (x.notna() & (x.str.len() > 10)).sum()  # Count of meaningful comments per user
+        }).rename(columns={
+            'rating': 'user_ratings_count',
+            'text': 'user_comments_count'
+        })
+        
+        # For views, we'll use the same count as ratings since views data might not exist
+        # This is as requested by the user - make views count same as ratings count
+        user_activity['user_views_count'] = user_activity['user_ratings_count']
+        
+        # Reset index to make user_id_encoded a column
+        user_activity = user_activity.reset_index()
+        
+        # Merge the activity counts back to the main dataframe
+        df_with_counts = df_with_counts.merge(
+            user_activity, 
+            on='user_id_encoded', 
+            how='left'
+        )
+        
+        # Fill any missing values with 0
+        activity_columns = ['user_views_count', 'user_ratings_count', 'user_comments_count']
+        for col in activity_columns:
+            if col in df_with_counts.columns:
+                df_with_counts[col] = df_with_counts[col].fillna(0).astype(int)
+        
+        # Log some statistics
+        if 'user_ratings_count' in df_with_counts.columns:
+            logger.info(f"User activity statistics:")
+            logger.info(f"  Average ratings per user: {df_with_counts['user_ratings_count'].mean():.2f}")
+            logger.info(f"  Average comments per user: {df_with_counts['user_comments_count'].mean():.2f}")
+            logger.info(f"  Average views per user: {df_with_counts['user_views_count'].mean():.2f}")
+            logger.info(f"  Total unique users: {df_with_counts['user_id_encoded'].nunique()}")
+        
+        return df_with_counts
 
     def clean_data(self) -> pd.DataFrame:
         """

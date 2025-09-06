@@ -226,7 +226,7 @@ class CollaborativeFiltering:
             logger.error(f"Error fitting matrix factorization: {str(e)}")
             raise
     
-    def get_user_based_recommendations(self, user_id: int, n_recommendations: int = 5,
+    def get_user_based_recommendations(self, user_id: str, n_recommendations: int = 5,
                                      min_similarity: float = 0.1) -> List[Dict]:
         """Get recommendations based on similar users' preferences."""
         if self.user_similarity_matrix is None:
@@ -301,7 +301,7 @@ class CollaborativeFiltering:
             logger.error(f"Error getting user-based recommendations: {str(e)}")
             raise
     
-    def get_item_based_recommendations(self, user_id: int, n_recommendations: int = 5,
+    def get_item_based_recommendations(self, user_id: str, n_recommendations: int = 5,
                                      min_similarity: float = 0.1) -> List[Dict]:
         """Get recommendations based on item similarities."""
         if self.item_similarity_matrix is None:
@@ -376,7 +376,7 @@ class CollaborativeFiltering:
             logger.error(f"Error getting item-based recommendations: {str(e)}")
             raise
     
-    def get_matrix_factorization_recommendations(self, user_id: int, n_recommendations: int = 5) -> List[Dict]:
+    def get_matrix_factorization_recommendations(self, user_id: str, n_recommendations: int = 5) -> List[Dict]:
         """Get recommendations using matrix factorization."""
         if self.user_factors is None or self.item_factors is None:
             self.fit_matrix_factorization()
@@ -425,7 +425,7 @@ class CollaborativeFiltering:
             logger.error(f"Error getting matrix factorization recommendations: {str(e)}")
             raise
     
-    def get_hybrid_recommendations(self, user_id: int, n_recommendations: int = 5,
+    def get_hybrid_recommendations(self, user_id: str, n_recommendations: int = 5,
                                  weights: Optional[Dict[str, float]] = None) -> List[Dict]:
         """Get hybrid recommendations combining multiple collaborative filtering methods."""
         if weights is None:
@@ -689,7 +689,7 @@ class CollaborativeFiltering:
         
         return filtered_items
 
-    def get_user_profile(self, user_id: int) -> Dict[str, Any]:
+    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
         """Get user profile and preferences."""
         if self.user_item_matrix is None:
             self.create_user_item_matrix()

@@ -1,0 +1,255 @@
+<!-- User Rating and Comment Component -->
+<!-- This component can be included in laptop detail pages -->
+
+<div id="userRatingComponent" class="card mt-4" style="display: none;">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-star"></i> Rate & Review This Laptop
+        </h6>
+    </div>
+    <div class="card-body">
+        <form id="ratingForm">
+            <input type="hidden" id="laptopId" value="">
+            
+            <!-- Rating Stars -->
+            <div class="form-group">
+                <label>Your Rating</label>
+                <div class="rating-input">
+                    <input type="radio" id="star5" name="rating" value="5">
+                    <label for="star5" class="star">★</label>
+                    <input type="radio" id="star4" name="rating" value="4">
+                    <label for="star4" class="star">★</label>
+                    <input type="radio" id="star3" name="rating" value="3">
+                    <label for="star3" class="star">★</label>
+                    <input type="radio" id="star2" name="rating" value="2">
+                    <label for="star2" class="star">★</label>
+                    <input type="radio" id="star1" name="rating" value="1">
+                    <label for="star1" class="star">★</label>
+                </div>
+            </div>
+            
+            <!-- Comment -->
+            <div class="form-group">
+                <label for="comment">Your Review (Optional)</label>
+                <textarea class="form-control" id="comment" rows="3" placeholder="Share your thoughts about this laptop..."></textarea>
+            </div>
+            
+            <!-- Submit Button -->
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-paper-plane"></i> Submit Rating
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- User's Existing Rating Display -->
+<div id="existingRatingDisplay" class="card mt-4" style="display: none;">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <i class="fas fa-check-circle"></i> Your Rating
+        </h6>
+    </div>
+    <div class="card-body">
+        <div id="userRatingContent">
+            <!-- User's rating will be displayed here -->
+        </div>
+        <button id="editRatingBtn" class="btn btn-outline-primary btn-sm mt-2">
+            <i class="fas fa-edit"></i> Edit Rating
+        </button>
+    </div>
+</div>
+
+<style>
+.rating-input {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+
+.rating-input input[type="radio"] {
+    display: none;
+}
+
+.rating-input .star {
+    font-size: 2rem;
+    color: #ddd;
+    cursor: pointer;
+    transition: color 0.2s;
+    margin-right: 5px;
+}
+
+.rating-input input[type="radio"]:checked ~ .star,
+.rating-input .star:hover,
+.rating-input .star:hover ~ .star {
+    color: #ffc107;
+}
+
+.rating-input input[type="radio"]:checked ~ .star {
+    color: #ffc107;
+}
+
+.user-rating-display {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-rating-stars {
+    color: #ffc107;
+    font-size: 1.2rem;
+}
+
+.rating-date {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+</style>
+
+<script>
+// Initialize rating component
+function initializeRatingComponent(laptopId, currentUserId) {
+    if (!currentUserId) {
+        document.getElementById('userRatingComponent').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('laptopId').value = laptopId;
+    document.getElementById('userRatingComponent').style.display = 'block';
+    
+    // Check if user already rated this laptop
+    checkExistingRating(laptopId, currentUserId);
+    
+    // Set up form submission
+    document.getElementById('ratingForm').addEventListener('submit', submitRating);
+    document.getElementById('editRatingBtn').addEventListener('click', editRating);
+}
+
+function checkExistingRating(laptopId, userId) {
+    fetch(`/api/users/${userId}/ratings/${laptopId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.rating) {
+                showExistingRating(data.rating);
+            } else {
+                showRatingForm();
+            }
+        })
+        .catch(error => {
+            console.error('Error checking existing rating:', error);
+            showRatingForm();
+        });
+}
+
+function showExistingRating(rating) {
+    document.getElementById('userRatingComponent').style.display = 'none';
+    document.getElementById('existingRatingDisplay').style.display = 'block';
+    
+    const content = document.getElementById('userRatingContent');
+    content.innerHTML = `
+        <div class="user-rating-display">
+            <div class="user-rating-stars">
+                ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
+            </div>
+            <span><strong>${rating.rating}/5</strong></span>
+            <span class="rating-date">${new Date(rating.timestamp).toLocaleDateString()}</span>
+        </div>
+        ${rating.comment ? `<p class="mt-2 mb-0">"${rating.comment}"</p>` : ''}
+    `;
+}
+
+function showRatingForm() {
+    document.getElementById('existingRatingDisplay').style.display = 'none';
+    document.getElementById('userRatingComponent').style.display = 'block';
+}
+
+function editRating() {
+    // Get current rating data and populate form
+    fetch(`/api/users/${document.getElementById('laptopId').value}/ratings/${document.getElementById('laptopId').value}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.rating) {
+                // Set the rating stars
+                document.querySelector(`input[name="rating"][value="${data.rating.rating}"]`).checked = true;
+                document.getElementById('comment').value = data.rating.comment || '';
+                
+                showRatingForm();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading rating for edit:', error);
+            showRatingForm();
+        });
+}
+
+function submitRating(event) {
+    event.preventDefault();
+    
+    const laptopId = document.getElementById('laptopId').value;
+    const rating = document.querySelector('input[name="rating"]:checked')?.value;
+    const comment = document.getElementById('comment').value;
+    
+    if (!rating) {
+        alert('Please select a rating');
+        return;
+    }
+    
+    // Get current user from session or global variable
+    const currentUserId = window.currentUserId;
+    if (!currentUserId) {
+        alert('Please log in to submit a rating');
+        return;
+    }
+    
+    fetch(`/api/users/${currentUserId}/ratings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            laptop_id: parseInt(laptopId),
+            rating: parseFloat(rating),
+            comment: comment
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Rating submitted successfully!');
+            // Refresh the rating display
+            checkExistingRating(laptopId, currentUserId);
+            // Optionally refresh the page to show updated average rating
+            // window.location.reload();
+        } else {
+            alert('Error submitting rating: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error submitting rating:', error);
+        alert('Error submitting rating');
+    });
+}
+
+// Track view when component is initialized
+function trackLaptopView(laptopId, userId) {
+    if (!userId) return;
+    
+    fetch(`/api/users/${userId}/behavior`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            laptop_id: parseInt(laptopId),
+            behavior_type: 'view',
+            data: {
+                page: 'laptop_detail',
+                timestamp: new Date().toISOString()
+            }
+        })
+    })
+    .catch(error => {
+        console.error('Error tracking view:', error);
+    });
+}
+</script>

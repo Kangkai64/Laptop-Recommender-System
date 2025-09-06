@@ -737,6 +737,9 @@
 
 
 
+    <!-- User Rating Component -->
+    {% include 'user_rating_component.html' %}
+
     <!-- Quick Actions -->
     <div class="row mt-5">
         <div class="col-md-4">
@@ -777,6 +780,60 @@
 
 {% block extra_js %}
 <script>
+// Global variable for current user (set by user management system)
+let currentUserId = null;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize rating component if user is logged in
+    const laptopId = {{ laptop.laptop_id }};
+    
+    // Check if there's a current user in session/localStorage
+    checkCurrentUser(laptopId);
+    
+    // Track page view
+    trackLaptopView(laptopId);
+});
+
+function checkCurrentUser(laptopId) {
+    // Try to get current user from localStorage (set by user management page)
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+        try {
+            const user = JSON.parse(savedUser);
+            currentUserId = user.user_id;
+            window.currentUserId = currentUserId; // Set global variable
+            
+            // Initialize rating component
+            initializeRatingComponent(laptopId, currentUserId);
+        } catch (e) {
+            console.error('Error parsing saved user:', e);
+        }
+    }
+}
+
+function trackLaptopView(laptopId) {
+    if (currentUserId) {
+        fetch(`/api/users/${currentUserId}/behavior`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                laptop_id: laptopId,
+                behavior_type: 'view',
+                data: {
+                    page: 'laptop_detail',
+                    timestamp: new Date().toISOString()
+                }
+            })
+        })
+        .catch(error => {
+            console.error('Error tracking view:', error);
+        });
+    }
+}
+
 // Image Gallery Functions
 function changeMainImage(imageSrc, imageIndex) {
     // Update main image

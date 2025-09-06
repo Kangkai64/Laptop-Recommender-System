@@ -189,7 +189,7 @@ class LaptopRecommenderSystem:
             logger.error(f"Error getting content-based recommendations: {str(e)}")
             raise
     
-    def get_collaborative_filtering_recommendations(self, user_id: int, 
+    def get_collaborative_filtering_recommendations(self, user_id: str, 
                                                   method: str = 'hybrid',
                                                   n_recommendations: int = None) -> List[Dict]:
         """
@@ -238,7 +238,7 @@ class LaptopRecommenderSystem:
             logger.error(f"Error getting collaborative filtering recommendations: {str(e)}")
             raise
     
-    def get_hybrid_recommendations(self, user_id: int, preferences: Dict,
+    def get_hybrid_recommendations(self, user_id: str, preferences: Dict,
                                  n_recommendations: int = None,
                                  weights: Optional[Dict[str, float]] = None) -> List[Dict]:
         """Get hybrid recommendations combining both approaches."""
@@ -743,7 +743,7 @@ def main():
         print(f"Getting collaborative filtering recommendations...")
         try:
             cf_recs = recommender.get_collaborative_filtering_recommendations(
-                user_id=1, method='hybrid', n_recommendations=5
+                user_id="AHV6QCNBJNSGLATP56JAWJ3C4G2A", method='hybrid', n_recommendations=5
             )
             
             if cf_recs:

@@ -94,10 +94,11 @@ The system now features **separated dataframes** for improved performance:
 
 #### 📊 Rating Data (`df_rating`)
 - **Reviews**: 15,827 user reviews
-- **Features**: 10 essential columns including normalized features
+- **Features**: 13 essential columns including normalized features and user activity counts
 - **Users**: 15,419 unique users
 - **Temporal Features**: Year, month, day of week extracted from timestamps
-- **Essential Columns**: `asin`, `parent_asin`, `user_id_encoded`, `rating`, `helpful_vote`, cleaned text, temporal features
+- **User Activity Tracking**: Views, ratings, and comments counts per user
+- **Essential Columns**: `asin`, `parent_asin`, `user_id_encoded`, `rating`, `helpful_vote`, `user_views_count`, `user_ratings_count`, `user_comments_count`, cleaned text, temporal features
 
 ### Data Normalization & Encoding
 - **Numerical Features**: Min-Max scaled to [0,1] range
@@ -112,6 +113,7 @@ The preprocessing pipeline extracts and creates additional features:
 - **Price Categories**: Budget, Mid-range, High-end, Premium based on price ranges
 - **Rating Categories**: Poor, Fair, Good, Excellent based on rating scores
 - **Review Analytics**: Review length, helpfulness ratio, brand popularity
+- **User Activity Analytics**: Views count, ratings count, comments count per user
 - **Content Features**: Cleaned text, processed features, parsed specifications
 
 ## 🧠 Algorithms
