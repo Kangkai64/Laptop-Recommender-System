@@ -391,6 +391,19 @@ def recommend():
             'priority': request.form.get('priority', 'performance')
         }
         
+        # Check if user is logged in and has saved preferences
+        user_id = session.get('user_id')
+        if user_id and user_manager:
+            try:
+                user_profile = user_manager.find_user_by_id_or_username(user_id)
+                if user_profile and user_profile.preferences:
+                    # Merge saved preferences with form data (form data takes precedence)
+                    saved_prefs = user_profile.preferences
+                    preferences = merge_preferences(saved_prefs, preferences)
+                    logger.info(f"Using merged preferences for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Could not load user preferences: {e}")
+        
         # Algorithm selection
         algorithm = request.form.get('algorithm', 'content_based')
 
@@ -398,11 +411,41 @@ def recommend():
         session['user_preferences'] = preferences
         session['algorithm'] = algorithm
         
+        # Save preferences to user profile if user is logged in
+        user_id = session.get('user_id')
+        if user_id and user_manager:
+            try:
+                user_manager.update_user_preferences(user_id, preferences)
+                logger.info(f"Updated preferences for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Could not save preferences for user {user_id}: {e}")
+        
         # Get recommendations
         try:
             if algorithm == 'content_based':
-                recommendations = get_recommendations(preferences)
+                # Use content-based filtering
+                query = {
+                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
+                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
+                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+                    'min_ram': preferences['ram_min'],
+                    'min_storage': preferences['storage_min'],
+                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
+                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
+                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
+                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
+                    'use_case': preferences['use_case'],
+                    'priority': preferences['priority']
+                }
+                recommendations = recommender_system.get_content_based_recommendations(
+                    preferences=query, n_recommendations=50
+                )
+                # Add method identifier
+                for rec in recommendations:
+                    rec['method'] = 'content_based'
                 recommendations = normalize_recommendations(recommendations)
+                logger.info(f"Generated {len(recommendations)} content-based recommendations")
+                
             elif algorithm == 'collaborative':
                 # Convert preferences to system format for collaborative filtering
                 query = {
@@ -418,11 +461,30 @@ def recommend():
                     'use_case': preferences['use_case'],
                     'priority': preferences['priority']
                 }
-                # Use automatic popular recommendations (no user_id required)
-                recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
-                    preferences=query, n_recommendations=10
-                )
+                
+                # Use enhanced collaborative filtering if user is logged in
+                if user_id and user_manager:
+                    try:
+                        recommendations = recommender_system.collaborative_filter.get_enhanced_recommendations(
+                            user_id=user_id, preferences=query, n_recommendations=50
+                        )
+                        logger.info(f"Generated {len(recommendations)} enhanced collaborative recommendations for user {user_id}")
+                    except Exception as e:
+                        logger.warning(f"Enhanced collaborative filtering failed for user {user_id}: {e}")
+                        # Fallback to popular recommendations
+                        recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
+                            preferences=query, n_recommendations=50
+                        )
+                        logger.info(f"Using fallback popular recommendations: {len(recommendations)} items")
+                else:
+                    # Use automatic popular recommendations for anonymous users
+                    recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
+                        preferences=query, n_recommendations=50
+                    )
+                    logger.info(f"Generated {len(recommendations)} popular recommendations for anonymous user")
+                
                 recommendations = normalize_recommendations(recommendations)
+                
             elif algorithm == 'hybrid':
                 # Convert preferences to system format for hybrid
                 query = {
@@ -440,12 +502,15 @@ def recommend():
                 }
                 # Use automatic hybrid recommendations (no user_id required)
                 recommendations = recommender_system.get_hybrid_recommendations_auto(
-                    preferences=query, n_recommendations=10
+                    preferences=query, n_recommendations=50
                 )
+                # Add method identifier
+                for rec in recommendations:
+                    rec['method'] = 'hybrid'
                 recommendations = normalize_recommendations(recommendations)
+                logger.info(f"Generated {len(recommendations)} hybrid recommendations")
             else:
                 raise Exception(f'Unsupported algorithm: {algorithm}')
-            recommendations = get_recommendations(preferences)
             
             # Add brand mapping to each laptop in recommendations
             for laptop in recommendations:
@@ -483,7 +548,21 @@ def recommend():
             logger.warning(f"Could not get available brands: {str(e)}")
             available_brands = []
     
-    return render_template('recommend.html', available_brands=available_brands)
+    # Pre-populate form with saved user preferences if user is logged in
+    saved_preferences = {}
+    user_id = session.get('user_id')
+    if user_id and user_manager:
+        try:
+            user_profile = user_manager.find_user_by_id_or_username(user_id)
+            if user_profile and user_profile.preferences:
+                saved_preferences = user_profile.preferences
+                logger.info(f"Loaded saved preferences for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Could not load user preferences: {e}")
+    
+    return render_template('recommend.html', 
+                         available_brands=available_brands,
+                         saved_preferences=saved_preferences)
 
 @app.route('/api/recommend', methods=['POST'])
 def api_recommend():
@@ -505,8 +584,21 @@ def api_recommend():
             'priority': data.get('priority', 'performance')
         }
         
-        # Get recommendations
-        recommendations = get_recommendations(preferences)
+        # Check if user is logged in and has saved preferences
+        user_id = session.get('user_id')
+        if user_id and user_manager:
+            try:
+                user_profile = user_manager.find_user_by_id_or_username(user_id)
+                if user_profile and user_profile.preferences:
+                    # Merge saved preferences with API data (API data takes precedence)
+                    saved_prefs = user_profile.preferences
+                    preferences = merge_preferences(saved_prefs, preferences)
+                    logger.info(f"Using merged preferences for user {user_id} in API")
+            except Exception as e:
+                logger.warning(f"Could not load user preferences in API: {e}")
+        
+        # Get recommendations (using content-based as default for API)
+        recommendations = get_content_based_recommendations(preferences)
         
         # Convert numpy types to Python types for JSON serialization
         serializable_recommendations = []
@@ -525,8 +617,8 @@ def api_recommend():
             'error': str(e)
         }), 500
 
-def get_recommendations(preferences: Dict) -> List[Dict]:
-    """Get personalized recommendations based on user preferences."""
+def get_content_based_recommendations(preferences: Dict) -> List[Dict]:
+    """Get content-based recommendations based on user preferences."""
     if not recommender_system:
         raise Exception("Recommendation system not initialized")
     
@@ -610,6 +702,44 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
             # Final fallback: return sample laptops filtered by budget
             logger.warning(f"Recommendation methods failed, using fallback: {e2}")
             return get_fallback_recommendations(preferences)
+
+def merge_preferences(saved_prefs: Dict, form_prefs: Dict) -> Dict:
+    """
+    Merge saved user preferences with form preferences.
+    Form preferences take precedence over saved preferences.
+    
+    Args:
+        saved_prefs: User's saved preferences from database
+        form_prefs: Preferences from the current form submission
+        
+    Returns:
+        Dict: Merged preferences with form data taking precedence
+    """
+    merged = saved_prefs.copy()
+    
+    # Map form field names to preference field names
+    field_mapping = {
+        'budget_min': 'budget_min',
+        'budget_max': 'budget_max', 
+        'brand': 'brand',
+        'processor_type': 'processor',
+        'ram_min': 'ram_min',
+        'storage_min': 'storage_min',
+        'screen_size': 'screen_size',
+        'gpu_requirement': 'gpu_requirement',
+        'battery_life': 'battery_life',
+        'weight_preference': 'weight_preference',
+        'use_case': 'use_case',
+        'priority': 'priority'
+    }
+    
+    # Override saved preferences with form data (only if form data is not empty)
+    for form_key, pref_key in field_mapping.items():
+        form_value = form_prefs.get(form_key)
+        if form_value and form_value != '' and form_value != 0:
+            merged[pref_key] = form_value
+    
+    return merged
 
 def get_rating_count_for_laptop(laptop_asin: str) -> int:
     """Get the number of ratings for a specific laptop."""
@@ -1496,6 +1626,19 @@ def api_create_user():
         
         user = user_manager.create_user(username=username, email=email)
         
+        # Store current user in session
+        session['current_user'] = {
+            'user_id': user.user_id,
+            'username': user.username,
+            'email': user.email,
+            'created_at': user.created_at,
+            'last_active': user.last_active,
+            'preferences': user.preferences,
+            'total_views': user.total_views,
+            'total_ratings': user.total_ratings,
+            'total_comments': user.total_comments
+        }
+        
         return jsonify({
             'success': True,
             'user': {
@@ -1504,6 +1647,7 @@ def api_create_user():
                 'email': user.email,
                 'created_at': user.created_at,
                 'last_active': user.last_active,
+                'preferences': user.preferences,
                 'total_views': user.total_views,
                 'total_ratings': user.total_ratings,
                 'total_comments': user.total_comments
@@ -1524,6 +1668,19 @@ def api_get_user(user_id):
         user = user_manager.get_user(user_id)
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        # Store current user in session
+        session['current_user'] = {
+            'user_id': user.user_id,
+            'username': user.username,
+            'email': user.email,
+            'created_at': user.created_at,
+            'last_active': user.last_active,
+            'preferences': user.preferences,
+            'total_views': user.total_views,
+            'total_ratings': user.total_ratings,
+            'total_comments': user.total_comments
+        }
         
         return jsonify({
             'success': True,
@@ -1610,6 +1767,52 @@ def api_get_user_rating_for_laptop(user_id, laptop_id):
         logger.error(f"Error getting user rating for laptop: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/users/<user_id>/ratings/<laptop_id>', methods=['POST'])
+def api_update_user_rating(user_id, laptop_id):
+    """API endpoint to update a user's rating for a specific laptop."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        rating = data.get('rating')
+        comment = data.get('comment', '')
+        
+        if not rating:
+            return jsonify({'success': False, 'error': 'rating is required'}), 400
+        
+        # Track the rating behavior
+        rating_behavior_id = user_manager.track_behavior(
+            user_id=user_id,
+            laptop_id=int(laptop_id),
+            behavior_type='rating',
+            data={'rating': float(rating)}
+        )
+        
+        # Track comment behavior separately if comment is provided
+        comment_behavior_id = None
+        if comment and comment.strip():
+            comment_behavior_id = user_manager.track_behavior(
+                user_id=user_id,
+                laptop_id=int(laptop_id),
+                behavior_type='comment',
+                data={'comment': comment.strip()}
+            )
+        
+        return jsonify({
+            'success': True,
+            'rating_behavior_id': rating_behavior_id,
+            'comment_behavior_id': comment_behavior_id,
+            'message': 'Rating updated successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating user rating: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/users/<user_id>/ratings', methods=['POST'])
 def api_submit_user_rating(user_id, laptop_id=None):
     """API endpoint to submit a user rating."""
@@ -1629,16 +1832,27 @@ def api_submit_user_rating(user_id, laptop_id=None):
             return jsonify({'success': False, 'error': 'laptop_id and rating are required'}), 400
         
         # Track the rating behavior
-        behavior_id = user_manager.track_behavior(
+        rating_behavior_id = user_manager.track_behavior(
             user_id=user_id,
             laptop_id=int(laptop_id),
             behavior_type='rating',
-            data={'rating': float(rating), 'comment': comment}
+            data={'rating': float(rating)}
         )
+        
+        # Track comment behavior separately if comment is provided
+        comment_behavior_id = None
+        if comment and comment.strip():
+            comment_behavior_id = user_manager.track_behavior(
+                user_id=user_id,
+                laptop_id=int(laptop_id),
+                behavior_type='comment',
+                data={'comment': comment.strip()}
+            )
         
         return jsonify({
             'success': True,
-            'behavior_id': behavior_id,
+            'rating_behavior_id': rating_behavior_id,
+            'comment_behavior_id': comment_behavior_id,
             'message': 'Rating submitted successfully'
         })
         
@@ -1740,6 +1954,38 @@ def api_get_user_statistics(user_id):
         logger.error(f"Error getting user statistics: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/users/current', methods=['GET'])
+def api_get_current_user():
+    """API endpoint to get the current user from session."""
+    try:
+        current_user = session.get('current_user')
+        if current_user:
+            return jsonify({
+                'success': True,
+                'user': current_user
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No user logged in'
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting current user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/logout', methods=['POST'])
+def api_logout_user():
+    """API endpoint to logout the current user."""
+    try:
+        session.pop('current_user', None)
+        return jsonify({
+            'success': True,
+            'message': 'User logged out successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error logging out user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/users/create-from-existing', methods=['POST'])
 def api_create_user_from_existing():
     """API endpoint to create a user profile from an existing user in the rating dataset."""
@@ -1763,6 +2009,19 @@ def api_create_user_from_existing():
         # Create user profile from existing user
         user = user_manager.create_user_from_existing(user_id_encoded, username)
         
+        # Store current user in session
+        session['current_user'] = {
+            'user_id': user.user_id,
+            'username': user.username,
+            'email': user.email,
+            'created_at': user.created_at,
+            'last_active': user.last_active,
+            'preferences': user.preferences,
+            'total_views': user.total_views,
+            'total_ratings': user.total_ratings,
+            'total_comments': user.total_comments
+        }
+        
         return jsonify({
             'success': True,
             'user': {
@@ -1771,6 +2030,7 @@ def api_create_user_from_existing():
                 'email': user.email,
                 'created_at': user.created_at,
                 'last_active': user.last_active,
+                'preferences': user.preferences,
                 'total_views': user.total_views,
                 'total_ratings': user.total_ratings,
                 'total_comments': user.total_comments
@@ -1780,6 +2040,92 @@ def api_create_user_from_existing():
     except Exception as e:
         logger.error(f"Error creating user from existing: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/test-algorithms', methods=['GET'])
+def test_algorithms():
+    """Test endpoint to verify different algorithms are working correctly."""
+    try:
+        if not recommender_system:
+            return jsonify({'error': 'System not initialized'}), 500
+        
+        # Test preferences
+        preferences = {
+            'budget_min': 2000,
+            'budget_max': 5000,
+            'brand': '',
+            'processor_type': '',
+            'ram_min': 8,
+            'storage_min': 256,
+            'screen_size': '',
+            'gpu_requirement': '',
+            'battery_life': '',
+            'weight_preference': '',
+            'use_case': 'general',
+            'priority': 'performance'
+        }
+        
+        # Convert to query format
+        query = {
+            'budget_range': (preferences['budget_min'], preferences['budget_max']),
+            'brand_preference': preferences['brand'] if preferences['brand'] else None,
+            'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+            'min_ram': preferences['ram_min'],
+            'min_storage': preferences['storage_min'],
+            'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
+            'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
+            'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
+            'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
+            'use_case': preferences['use_case'],
+            'priority': preferences['priority']
+        }
+        
+        results = {}
+        
+        # Test Content-Based Filtering
+        try:
+            cb_recs = recommender_system.get_content_based_recommendations(
+                preferences=query, n_recommendations=5
+            )
+            results['content_based'] = {
+                'count': len(cb_recs),
+                'first_3': [{'title': rec.get('title_y', 'Unknown'), 'brand': rec.get('brand', 'Unknown'), 'price': rec.get('price_myr', 0)} for rec in cb_recs[:3]]
+            }
+        except Exception as e:
+            results['content_based'] = {'error': str(e)}
+        
+        # Test Collaborative Filtering (Popular)
+        try:
+            cf_recs = recommender_system.collaborative_filter.get_popular_recommendations(
+                preferences=query, n_recommendations=5
+            )
+            results['collaborative'] = {
+                'count': len(cf_recs),
+                'first_3': [{'title': rec.get('title_y', 'Unknown'), 'brand': rec.get('brand', 'Unknown'), 'price': rec.get('price_myr', 0)} for rec in cf_recs[:3]]
+            }
+        except Exception as e:
+            results['collaborative'] = {'error': str(e)}
+        
+        # Test Hybrid
+        try:
+            hybrid_recs = recommender_system.get_hybrid_recommendations_auto(
+                preferences=query, n_recommendations=5
+            )
+            results['hybrid'] = {
+                'count': len(hybrid_recs),
+                'first_3': [{'title': rec.get('title_y', 'Unknown'), 'brand': rec.get('brand', 'Unknown'), 'price': rec.get('price_myr', 0)} for rec in hybrid_recs[:3]]
+            }
+        except Exception as e:
+            results['hybrid'] = {'error': str(e)}
+        
+        return jsonify({
+            'success': True,
+            'test_preferences': preferences,
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error testing algorithms: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):

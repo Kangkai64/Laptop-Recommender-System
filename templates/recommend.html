@@ -12,6 +12,12 @@
                 <p class="lead text-muted">
                     Tell us about your needs and preferences, and our AI will find the perfect laptop for you.
                 </p>
+                {% if saved_preferences %}
+                <div class="alert alert-info d-inline-block">
+                    <i class="fas fa-user-cog me-2"></i>
+                    <strong>Your saved preferences have been loaded!</strong> You can modify them below or leave them as-is.
+                </div>
+                {% endif %}
             </div>
 
             <!-- Recommendation Form -->
@@ -30,7 +36,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text">RM</span>
                                         <input type="number" class="form-control" id="budget_min" name="budget_min" 
-                                               min="0" max="100000" value="0" required>
+                                               min="0" max="100000" value="{{ saved_preferences.budget_min or 0 }}" required>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -38,7 +44,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text">RM</span>
                                         <input type="number" class="form-control" id="budget_max" name="budget_max" 
-                                               min="0" max="100000" value="5000" required>
+                                               min="0" max="100000" value="{{ saved_preferences.budget_max or 5000 }}" required>
                                     </div>
                                 </div>
                             </div>
@@ -61,7 +67,7 @@
                                 <option value="">Any Brand</option>
                                 {% if available_brands %}
                                     {% for brand in available_brands %}
-                                        <option value="{{ brand }}">{{ brand }}</option>
+                                        <option value="{{ brand }}" {% if saved_preferences.brand == brand %}selected{% endif %}>{{ brand }}</option>
                                     {% endfor %}
                                 {% else %}
                                     <!-- Fallback options if dynamic brands are not available -->
@@ -88,9 +94,9 @@
                             <label for="processor_type" class="form-label">Processor Type (Optional)</label>
                             <select class="form-select" id="processor_type" name="processor_type">
                                 <option value="">Any Processor</option>
-                                <option value="Intel">Intel</option>
-                                <option value="AMD">AMD</option>
-                                <option value="Apple">Apple Silicon</option>
+                                <option value="Intel" {% if saved_preferences.processor == 'Intel' %}selected{% endif %}>Intel</option>
+                                <option value="AMD" {% if saved_preferences.processor == 'AMD' %}selected{% endif %}>AMD</option>
+                                <option value="Apple" {% if saved_preferences.processor == 'Apple' %}selected{% endif %}>Apple Silicon</option>
                             </select>
                         </div>
 
@@ -104,21 +110,21 @@
                                 <div class="col-md-6">
                                     <label for="ram_min" class="form-label">Minimum RAM (GB)</label>
                                     <select class="form-select" id="ram_min" name="ram_min" required>
-                                        <option value="4">4 GB</option>
-                                        <option value="8" selected>8 GB</option>
-                                        <option value="16">16 GB</option>
-                                        <option value="32">32 GB</option>
-                                        <option value="64">64 GB</option>
+                                        <option value="4" {% if saved_preferences.ram_min == 4 %}selected{% endif %}>4 GB</option>
+                                        <option value="8" {% if not saved_preferences.ram_min or saved_preferences.ram_min == 8 %}selected{% endif %}>8 GB</option>
+                                        <option value="16" {% if saved_preferences.ram_min == 16 %}selected{% endif %}>16 GB</option>
+                                        <option value="32" {% if saved_preferences.ram_min == 32 %}selected{% endif %}>32 GB</option>
+                                        <option value="64" {% if saved_preferences.ram_min == 64 %}selected{% endif %}>64 GB</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="storage_min" class="form-label">Minimum Storage (GB)</label>
                                     <select class="form-select" id="storage_min" name="storage_min" required>
-                                        <option value="128">128 GB</option>
-                                        <option value="256" selected>256 GB</option>
-                                        <option value="512">512 GB</option>
-                                        <option value="1000">1 TB</option>
-                                        <option value="2000">2 TB</option>
+                                        <option value="128" {% if saved_preferences.storage_min == 128 %}selected{% endif %}>128 GB</option>
+                                        <option value="256" {% if not saved_preferences.storage_min or saved_preferences.storage_min == 256 %}selected{% endif %}>256 GB</option>
+                                        <option value="512" {% if saved_preferences.storage_min == 512 %}selected{% endif %}>512 GB</option>
+                                        <option value="1000" {% if saved_preferences.storage_min == 1000 %}selected{% endif %}>1 TB</option>
+                                        <option value="2000" {% if saved_preferences.storage_min == 2000 %}selected{% endif %}>2 TB</option>
                                     </select>
                                 </div>
                             </div>
@@ -135,20 +141,20 @@
                                     <label for="screen_size" class="form-label">Screen Size (Optional)</label>
                                     <select class="form-select" id="screen_size" name="screen_size">
                                         <option value="">Any Size</option>
-                                        <option value="11">11" - Ultra Portable</option>
-                                        <option value="13">13" - Portable</option>
-                                        <option value="14">14" - Balanced</option>
-                                        <option value="15">15" - Standard</option>
-                                        <option value="17">17" - Large</option>
+                                        <option value="11" {% if saved_preferences.screen_size == '11' %}selected{% endif %}>11" - Ultra Portable</option>
+                                        <option value="13" {% if saved_preferences.screen_size == '13' %}selected{% endif %}>13" - Portable</option>
+                                        <option value="14" {% if saved_preferences.screen_size == '14' %}selected{% endif %}>14" - Balanced</option>
+                                        <option value="15" {% if saved_preferences.screen_size == '15' %}selected{% endif %}>15" - Standard</option>
+                                        <option value="17" {% if saved_preferences.screen_size == '17' %}selected{% endif %}>17" - Large</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="gpu_requirement" class="form-label">Graphics Requirements (Optional)</label>
                                     <select class="form-select" id="gpu_requirement" name="gpu_requirement">
                                         <option value="">Any Graphics</option>
-                                        <option value="integrated">Integrated Graphics (Basic tasks)</option>
-                                        <option value="dedicated">Dedicated Graphics (Gaming/Creative)</option>
-                                        <option value="high_end">High-end Graphics (Professional)</option>
+                                        <option value="integrated" {% if saved_preferences.gpu_requirement == 'integrated' %}selected{% endif %}>Integrated Graphics (Basic tasks)</option>
+                                        <option value="dedicated" {% if saved_preferences.gpu_requirement == 'dedicated' %}selected{% endif %}>Dedicated Graphics (Gaming/Creative)</option>
+                                        <option value="high_end" {% if saved_preferences.gpu_requirement == 'high_end' %}selected{% endif %}>High-end Graphics (Professional)</option>
                                     </select>
                                 </div>
                             </div>
@@ -165,20 +171,20 @@
                                     <label for="battery_life" class="form-label">Battery Life Priority (Optional)</label>
                                     <select class="form-select" id="battery_life" name="battery_life">
                                         <option value="">Not Important</option>
-                                        <option value="short">4-6 hours (Basic)</option>
-                                        <option value="medium">6-8 hours (Standard)</option>
-                                        <option value="long">8+ hours (Extended)</option>
-                                        <option value="all_day">12+ hours (All-day)</option>
+                                        <option value="short" {% if saved_preferences.battery_life == 'short' %}selected{% endif %}>4-6 hours (Basic)</option>
+                                        <option value="medium" {% if saved_preferences.battery_life == 'medium' %}selected{% endif %}>6-8 hours (Standard)</option>
+                                        <option value="long" {% if saved_preferences.battery_life == 'long' %}selected{% endif %}>8+ hours (Extended)</option>
+                                        <option value="all_day" {% if saved_preferences.battery_life == 'all_day' %}selected{% endif %}>12+ hours (All-day)</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="weight_preference" class="form-label">Weight Preference (Optional)</label>
                                     <select class="form-select" id="weight_preference" name="weight_preference">
                                         <option value="">Any Weight</option>
-                                        <option value="ultra_light">Under 1.5kg (Ultra-light)</option>
-                                        <option value="light">1.5-2kg (Light)</option>
-                                        <option value="standard">2-2.5kg (Standard)</option>
-                                        <option value="heavy">Over 2.5kg (Performance focused)</option>
+                                        <option value="ultra_light" {% if saved_preferences.weight_preference == 'ultra_light' %}selected{% endif %}>Under 1.5kg (Ultra-light)</option>
+                                        <option value="light" {% if saved_preferences.weight_preference == 'light' %}selected{% endif %}>1.5-2kg (Light)</option>
+                                        <option value="standard" {% if saved_preferences.weight_preference == 'standard' %}selected{% endif %}>2-2.5kg (Standard)</option>
+                                        <option value="heavy" {% if saved_preferences.weight_preference == 'heavy' %}selected{% endif %}>Over 2.5kg (Performance focused)</option>
                                     </select>
                                 </div>
                             </div>
@@ -192,13 +198,13 @@
                             </h4>
                             <label for="use_case" class="form-label">What will you mainly use this laptop for?</label>
                             <select class="form-select" id="use_case" name="use_case" required>
-                                <option value="general" selected>General Use (Web browsing, Office work)</option>
-                                <option value="student">Student (Note-taking, Research, Light programming)</option>
-                                <option value="business">Business (Presentations, Data analysis)</option>
-                                <option value="gaming">Gaming (High-performance games)</option>
-                                <option value="creative">Creative Work (Video editing, Graphic design)</option>
-                                <option value="development">Software Development (Coding, Testing)</option>
-                                <option value="professional">Professional Work (CAD, 3D modeling)</option>
+                                <option value="general" {% if not saved_preferences.use_case or saved_preferences.use_case == 'general' %}selected{% endif %}>General Use (Web browsing, Office work)</option>
+                                <option value="student" {% if saved_preferences.use_case == 'student' %}selected{% endif %}>Student (Note-taking, Research, Light programming)</option>
+                                <option value="business" {% if saved_preferences.use_case == 'business' %}selected{% endif %}>Business (Presentations, Data analysis)</option>
+                                <option value="gaming" {% if saved_preferences.use_case == 'gaming' %}selected{% endif %}>Gaming (High-performance games)</option>
+                                <option value="creative" {% if saved_preferences.use_case == 'creative' %}selected{% endif %}>Creative Work (Video editing, Graphic design)</option>
+                                <option value="development" {% if saved_preferences.use_case == 'development' %}selected{% endif %}>Software Development (Coding, Testing)</option>
+                                <option value="professional" {% if saved_preferences.use_case == 'professional' %}selected{% endif %}>Professional Work (CAD, 3D modeling)</option>
                             </select>
                         </div>
 
@@ -232,11 +238,11 @@
                             </h4>
                             <label for="priority" class="form-label">What's most important to you?</label>
                             <select class="form-select" id="priority" name="priority" required>
-                                <option value="performance" selected>Performance & Speed</option>
-                                <option value="battery">Battery Life</option>
-                                <option value="portability">Portability & Weight</option>
-                                <option value="display">Display Quality</option>
-                                <option value="value">Best Value for Money</option>
+                                <option value="performance" {% if not saved_preferences.priority or saved_preferences.priority == 'performance' %}selected{% endif %}>Performance & Speed</option>
+                                <option value="battery" {% if saved_preferences.priority == 'battery' %}selected{% endif %}>Battery Life</option>
+                                <option value="portability" {% if saved_preferences.priority == 'portability' %}selected{% endif %}>Portability & Weight</option>
+                                <option value="display" {% if saved_preferences.priority == 'display' %}selected{% endif %}>Display Quality</option>
+                                <option value="value" {% if saved_preferences.priority == 'value' %}selected{% endif %}>Best Value for Money</option>
                             </select>
                         </div>
 

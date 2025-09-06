@@ -310,6 +310,22 @@
                             <i class="fas fa-users me-1"></i>User Management
                         </a>
                     </li>
+                    <li class="nav-item" id="currentUserNav" style="display: none;">
+                        <div class="nav-link dropdown">
+                            <a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-user me-1"></i><span id="currentUserNavName">User</span>
+                            </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="{{ url_for('user_management') }}">
+                                    <i class="fas fa-cog me-2"></i>Manage Account
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="logoutUser()">
+                                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                                </a></li>
+                            </ul>
+                        </div>
+                    </li>
                     <li class="nav-item">
                         <button class="nav-link btn btn-link" onclick="openCompareModal()" style="border: none; background: none;">
                             <i class="fas fa-balance-scale me-1"></i>Compare
@@ -656,11 +672,73 @@
             }, 3000);
         }
         
+        // Session management functions
+        function loadCurrentUser() {
+            fetch('/api/users/current')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.user) {
+                        displayCurrentUserInNav(data.user);
+                        // Store in global variable for other pages
+                        window.currentUser = data.user;
+                        window.currentUserId = data.user.user_id;
+                    } else {
+                        hideCurrentUserInNav();
+                        window.currentUser = null;
+                        window.currentUserId = null;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading current user:', error);
+                    hideCurrentUserInNav();
+                    window.currentUser = null;
+                    window.currentUserId = null;
+                });
+        }
+        
+        function displayCurrentUserInNav(user) {
+            $('#currentUserNavName').text(user.username);
+            $('#currentUserNav').show();
+        }
+        
+        function hideCurrentUserInNav() {
+            $('#currentUserNav').hide();
+        }
+        
+        function logoutUser() {
+            fetch('/api/users/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    hideCurrentUserInNav();
+                    window.currentUser = null;
+                    window.currentUserId = null;
+                    showNotification('Logged out successfully!', 'success');
+                    // Redirect to home page
+                    window.location.href = '/';
+                } else {
+                    showNotification('Error logging out: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error logging out:', error);
+                showNotification('Error logging out', 'error');
+            });
+        }
+        
         // Auto-hide alerts after 5 seconds
         $(document).ready(function() {
             setTimeout(function() {
                 $('.alert').fadeOut('slow');
             }, 5000);
+            
+            // Load current user on page load
+            loadCurrentUser();
             
             // Handle compare button clicks using data attributes
             $(document).on('click', '.compare-btn', function() {

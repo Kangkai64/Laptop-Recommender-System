@@ -3,6 +3,8 @@ Collaborative Filtering Algorithm for Laptop Recommendation System
 
 This module implements collaborative filtering approaches including user-based,
 item-based, and matrix factorization methods for laptop recommendations.
+Enhanced to analyze comprehensive user behavior including view history, ratings,
+activity patterns, and preferences.
 """
 
 import numpy as np
@@ -12,6 +14,7 @@ from sklearn.decomposition import NMF, TruncatedSVD
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 import warnings
+from user_behavior_analyzer import UserBehaviorAnalyzer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +26,7 @@ class CollaborativeFiltering:
     """Collaborative Filtering algorithm for laptop recommendations."""
     
     def __init__(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
-                 config: Optional[Dict] = None):
+                 config: Optional[Dict] = None, db_path: str = "data/user_data.db"):
         """Initialize the Collaborative Filtering system."""
         self.df_laptop = df_laptop.copy()
         self.df_rating = df_rating.copy()
@@ -32,6 +35,10 @@ class CollaborativeFiltering:
         self.item_similarity_matrix = None
         self.user_factors = None
         self.item_factors = None
+        
+        # Initialize behavior analyzer for enhanced user profiling
+        self.behavior_analyzer = UserBehaviorAnalyzer(db_path)
+        self.enhanced_user_profiles = {}
         
         # Default configuration
         self.config = {
@@ -65,6 +72,97 @@ class CollaborativeFiltering:
                 self.config[section].update(params)
             else:
                 self.config[section] = params
+    
+    def create_enhanced_user_item_matrix(self) -> pd.DataFrame:
+        """Create enhanced user-item matrix including implicit feedback from behavior data."""
+        logger.info("Creating enhanced user-item matrix with behavior data...")
+        
+        # Start with basic rating matrix
+        self.create_user_item_matrix()
+        
+        if self.user_item_matrix is None or self.user_item_matrix.empty:
+            return self.user_item_matrix
+        
+        try:
+            # Get all users in the system
+            all_users = set(self.user_item_matrix.index.tolist())
+            
+            # Add behavior-based implicit feedback
+            enhanced_matrix = self.user_item_matrix.copy()
+            
+            for user_id in all_users:
+                try:
+                    # Get enhanced user profile
+                    enhanced_profile = self.get_enhanced_user_profile(user_id)
+                    
+                    if not enhanced_profile:
+                        continue
+                    
+                    # Add implicit feedback from view history
+                    view_insights = enhanced_profile.get('view_insights', {})
+                    if view_insights.get('views'):
+                        for view in view_insights['views']:
+                            laptop_id = view['laptop_id']
+                            if laptop_id in enhanced_matrix.columns:
+                                # Add implicit rating based on view behavior
+                                implicit_rating = self._calculate_implicit_rating(view, enhanced_profile)
+                                current_rating = enhanced_matrix.loc[user_id, laptop_id]
+                                
+                                # Only add implicit rating if no explicit rating exists
+                                if current_rating == 0:
+                                    enhanced_matrix.loc[user_id, laptop_id] = implicit_rating
+                    
+                    # Add implicit feedback from activity patterns
+                    activity_insights = enhanced_profile.get('activity_insights', {})
+                    if activity_insights.get('activity_counts'):
+                        # Boost ratings for users with high engagement
+                        engagement_boost = activity_insights.get('engagement_score', 0)
+                        if engagement_boost > 0.5:
+                            # Slightly boost existing ratings for engaged users
+                            user_ratings = enhanced_matrix.loc[user_id]
+                            non_zero_ratings = user_ratings[user_ratings > 0]
+                            if len(non_zero_ratings) > 0:
+                                boost_factor = 1 + (engagement_boost - 0.5) * 0.1  # Max 5% boost
+                                enhanced_matrix.loc[user_id, non_zero_ratings.index] *= boost_factor
+                
+                except Exception as e:
+                    logger.warning(f"Error processing user {user_id} for enhanced matrix: {e}")
+                    continue
+            
+            self.user_item_matrix = enhanced_matrix
+            logger.info(f"Enhanced user-item matrix created with {enhanced_matrix.shape[0]} users and {enhanced_matrix.shape[1]} items")
+            return enhanced_matrix
+            
+        except Exception as e:
+            logger.error(f"Error creating enhanced user-item matrix: {e}")
+            return self.user_item_matrix
+    
+    def _calculate_implicit_rating(self, view_data: Dict, user_profile: Dict) -> float:
+        """Calculate implicit rating from view behavior."""
+        base_rating = 2.0  # Base implicit rating
+        
+        # Adjust based on view duration
+        duration = view_data.get('duration', 0)
+        if duration > 120:  # 2+ minutes
+            base_rating += 1.0
+        elif duration > 60:  # 1+ minute
+            base_rating += 0.5
+        
+        # Adjust based on user's rating patterns
+        rating_insights = user_profile.get('rating_insights', {})
+        avg_rating = rating_insights.get('average_rating', 3.0)
+        if avg_rating > 4.0:
+            base_rating += 0.5
+        elif avg_rating < 3.0:
+            base_rating -= 0.5
+        
+        # Adjust based on user engagement
+        activity_insights = user_profile.get('activity_insights', {})
+        engagement = activity_insights.get('engagement_score', 0.5)
+        base_rating += (engagement - 0.5) * 0.5
+        
+        # Ensure rating is within valid range
+        return max(1.0, min(5.0, base_rating))
     
     def create_user_item_matrix(self) -> pd.DataFrame:
         """Create user-item rating matrix from rating data."""
@@ -549,6 +647,235 @@ class CollaborativeFiltering:
         except Exception:
             return None
     
+    def get_enhanced_recommendations(self, user_id: str, preferences: Optional[Dict] = None,
+                                   n_recommendations: int = 10) -> List[Dict]:
+        """Get enhanced recommendations using comprehensive user profile analysis."""
+        try:
+            # Get enhanced user profile
+            enhanced_profile = self.get_enhanced_user_profile(user_id)
+            
+            if not enhanced_profile:
+                logger.warning(f"No enhanced profile available for user {user_id}, falling back to basic recommendations")
+                return self.get_popular_recommendations(preferences, n_recommendations)
+            
+            # Create enhanced user-item matrix
+            if self.user_item_matrix is None:
+                self.create_enhanced_user_item_matrix()
+            
+            # Get user's behavior insights
+            rating_insights = enhanced_profile.get('rating_insights', {})
+            view_insights = enhanced_profile.get('view_insights', {})
+            brand_preferences = enhanced_profile.get('brand_preferences', {})
+            price_preferences = enhanced_profile.get('price_preferences', {})
+            feature_preferences = enhanced_profile.get('feature_preferences', {})
+            
+            # Calculate personalized scores for each item
+            item_scores = {}
+            
+            for item_id in self.user_item_matrix.columns:
+                score = 0.0
+                laptop_data = self._get_laptop_details(item_id)
+                
+                if not laptop_data:
+                    continue
+                
+                # Base popularity score
+                popularity_score = self._calculate_popularity_score(item_id)
+                score += popularity_score * 0.3
+                
+                # Brand preference score
+                brand_score = self._calculate_brand_preference_score(
+                    laptop_data, brand_preferences
+                )
+                score += brand_score * 0.2
+                
+                # Price preference score
+                price_score = self._calculate_price_preference_score(
+                    laptop_data, price_preferences
+                )
+                score += price_score * 0.2
+                
+                # Feature preference score
+                feature_score = self._calculate_feature_preference_score(
+                    laptop_data, feature_preferences
+                )
+                score += feature_score * 0.2
+                
+                # User engagement score
+                engagement_score = self._calculate_engagement_score(
+                    item_id, user_id, enhanced_profile
+                )
+                score += engagement_score * 0.1
+                
+                item_scores[item_id] = {
+                    'total_score': score,
+                    'popularity_score': popularity_score,
+                    'brand_score': brand_score,
+                    'price_score': price_score,
+                    'feature_score': feature_score,
+                    'engagement_score': engagement_score,
+                    'laptop_data': laptop_data
+                }
+            
+            # Sort by total score
+            sorted_items = sorted(item_scores.items(), 
+                                key=lambda x: x[1]['total_score'], reverse=True)
+            
+            # Apply additional filtering based on preferences
+            if preferences:
+                sorted_items = self._apply_preference_filtering(sorted_items, preferences)
+            
+            # Get top recommendations
+            recommendations = []
+            for item_id, scores in sorted_items[:n_recommendations]:
+                laptop_data = scores['laptop_data'].copy()
+                laptop_data['recommendation_score'] = scores['total_score']
+                laptop_data['method'] = 'enhanced_collaborative'
+                laptop_data['score_breakdown'] = {
+                    'popularity': scores['popularity_score'],
+                    'brand': scores['brand_score'],
+                    'price': scores['price_score'],
+                    'features': scores['feature_score'],
+                    'engagement': scores['engagement_score']
+                }
+                recommendations.append(laptop_data)
+            
+            logger.info(f"Generated {len(recommendations)} enhanced recommendations for user {user_id}")
+            return recommendations
+            
+        except Exception as e:
+            logger.error(f"Error getting enhanced recommendations for user {user_id}: {str(e)}")
+            return self.get_popular_recommendations(preferences, n_recommendations)
+    
+    def _calculate_popularity_score(self, item_id: str) -> float:
+        """Calculate popularity score for an item."""
+        if self.user_item_matrix is None or item_id not in self.user_item_matrix.columns:
+            return 0.0
+        
+        ratings = self.user_item_matrix[item_id]
+        non_zero_ratings = ratings[ratings > 0]
+        
+        if len(non_zero_ratings) == 0:
+            return 0.0
+        
+        avg_rating = non_zero_ratings.mean()
+        rating_count = len(non_zero_ratings)
+        # Popularity score combines average rating and number of ratings
+        return avg_rating * np.log(1 + rating_count)
+    
+    def _calculate_brand_preference_score(self, laptop_data: Dict, brand_preferences: Dict) -> float:
+        """Calculate brand preference score."""
+        laptop_brand = laptop_data.get('brand', 'Unknown')
+        if laptop_brand == 'Unknown' or not brand_preferences.get('preferred_brands'):
+            return 0.5  # Neutral score
+        
+        brand_scores = dict(brand_preferences.get('preferred_brands', []))
+        return brand_scores.get(laptop_brand, 0.5)
+    
+    def _calculate_price_preference_score(self, laptop_data: Dict, price_preferences: Dict) -> float:
+        """Calculate price preference score."""
+        laptop_price = laptop_data.get('price_myr', 0)
+        if laptop_price <= 0 or not price_preferences.get('preferred_price_range'):
+            return 0.5  # Neutral score
+        
+        min_price, max_price = price_preferences['preferred_price_range']
+        weighted_avg = price_preferences.get('weighted_average_price', (min_price + max_price) / 2)
+        
+        # Score based on how close the price is to user's preferred range
+        if min_price <= laptop_price <= max_price:
+            return 1.0
+        else:
+            # Calculate distance from preferred range
+            if laptop_price < min_price:
+                distance = (min_price - laptop_price) / min_price
+            else:
+                distance = (laptop_price - max_price) / max_price
+            
+            return max(0.0, 1.0 - distance)
+    
+    def _calculate_feature_preference_score(self, laptop_data: Dict, feature_preferences: Dict) -> float:
+        """Calculate feature preference score."""
+        if not feature_preferences:
+            return 0.5  # Neutral score
+        
+        total_score = 0.0
+        feature_count = 0
+        
+        for feature, preferences in feature_preferences.items():
+            if feature in laptop_data:
+                laptop_value = laptop_data[feature]
+                preferred_value = preferences.get('preferred_value', 0)
+                
+                if preferred_value > 0:
+                    # Calculate similarity score
+                    if isinstance(laptop_value, (int, float)) and isinstance(preferred_value, (int, float)):
+                        # For numeric features
+                        if preferred_value > 0:
+                            similarity = 1.0 - abs(laptop_value - preferred_value) / max(laptop_value, preferred_value)
+                            total_score += max(0.0, similarity)
+                            feature_count += 1
+                    elif isinstance(laptop_value, str) and isinstance(preferred_value, str):
+                        # For string features (exact match)
+                        if laptop_value.lower() == preferred_value.lower():
+                            total_score += 1.0
+                            feature_count += 1
+        
+        return total_score / max(feature_count, 1) if feature_count > 0 else 0.5
+    
+    def _calculate_engagement_score(self, item_id: str, user_id: str, enhanced_profile: Dict) -> float:
+        """Calculate engagement score based on user's interaction with similar items."""
+        view_insights = enhanced_profile.get('view_insights', {})
+        activity_insights = enhanced_profile.get('activity_insights', {})
+        
+        # Base engagement score
+        engagement_score = activity_insights.get('engagement_score', 0.5)
+        
+        # Check if user has viewed this specific item
+        views = view_insights.get('views', [])
+        for view in views:
+            if view['laptop_id'] == item_id:
+                # Boost score if user has viewed this item
+                duration = view.get('duration', 0)
+                if duration > 60:  # 1+ minute view
+                    engagement_score += 0.2
+                else:
+                    engagement_score += 0.1
+                break
+        
+        return min(1.0, engagement_score)
+    
+    def _apply_preference_filtering(self, sorted_items: List, preferences: Dict) -> List:
+        """Apply additional filtering based on user preferences."""
+        filtered_items = []
+        
+        for item_id, scores in sorted_items:
+            laptop_data = scores['laptop_data']
+            
+            # Budget filtering
+            if 'budget_range' in preferences and preferences['budget_range']:
+                budget_min, budget_max = preferences['budget_range']
+                laptop_price = laptop_data.get('price_myr', 0)
+                if not (budget_min <= laptop_price <= budget_max):
+                    continue
+            
+            # Brand filtering
+            if 'brand_preference' in preferences and preferences['brand_preference']:
+                preferred_brand = preferences['brand_preference']
+                laptop_brand = laptop_data.get('brand', '')
+                if preferred_brand.lower() != laptop_brand.lower():
+                    continue
+            
+            # RAM filtering
+            if 'min_ram' in preferences:
+                min_ram = preferences['min_ram']
+                laptop_ram = laptop_data.get('ram_gb', 0)
+                if laptop_ram < min_ram:
+                    continue
+            
+            filtered_items.append((item_id, scores))
+        
+        return filtered_items
+
     def get_popular_recommendations(self, preferences: Dict = None, 
                                   n_recommendations: int = 10) -> List[Dict]:
         """Get popular recommendations based on overall user behavior patterns."""
@@ -699,8 +1026,30 @@ class CollaborativeFiltering:
         
         return filtered_items
 
+    def get_enhanced_user_profile(self, user_id: str) -> Dict[str, Any]:
+        """Get comprehensive user profile including behavior analysis."""
+        if user_id in self.enhanced_user_profiles:
+            return self.enhanced_user_profiles[user_id]
+        
+        try:
+            # Create enhanced profile using behavior analyzer
+            enhanced_profile = self.behavior_analyzer.create_enhanced_user_profile(
+                user_id, self.df_laptop
+            )
+            
+            # Cache the profile
+            self.enhanced_user_profiles[user_id] = enhanced_profile
+            
+            logger.info(f"Created enhanced profile for user {user_id}")
+            return enhanced_profile
+            
+        except Exception as e:
+            logger.error(f"Error creating enhanced user profile for {user_id}: {e}")
+            # Fallback to basic profile
+            return self.get_user_profile(user_id)
+    
     def get_user_profile(self, user_id: str) -> Dict[str, Any]:
-        """Get user profile and preferences."""
+        """Get basic user profile and preferences (fallback method)."""
         if self.user_item_matrix is None:
             self.create_user_item_matrix()
         

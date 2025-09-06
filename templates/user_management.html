@@ -11,7 +11,7 @@
             </h1>
             
             <!-- User Selection/Creation Section -->
-            <div class="card mb-4">
+            <div id="userSelectionCard" class="card mb-4">
                 <div class="card-header">
                     <h5 class="mb-0">
                         <i class="fas fa-user-plus"></i> Select or Create User
@@ -76,9 +76,14 @@
                     <h5 class="mb-0">
                         <i class="fas fa-user"></i> Current User
                     </h5>
-                    <button id="logoutUser" class="btn btn-outline-secondary btn-sm">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
+                    <div>
+                        <button id="switchUser" class="btn btn-outline-primary btn-sm me-2">
+                            <i class="fas fa-exchange-alt"></i> Switch User
+                        </button>
+                        <button id="logoutUser" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -127,22 +132,22 @@
             <div id="userActivityTabs" style="display: none;">
                 <ul class="nav nav-tabs" id="activityTabs" role="tablist">
                     <li class="nav-item">
-                        <a class="nav-link active" id="views-tab" data-toggle="tab" href="#views" role="tab">
+                        <a class="nav-link active" id="views-tab" data-bs-toggle="tab" href="#views" role="tab" aria-controls="views" aria-selected="true">
                             <i class="fas fa-eye"></i> View History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" id="ratings-tab" data-toggle="tab" href="#ratings" role="tab">
+                        <a class="nav-link" id="ratings-tab" data-bs-toggle="tab" href="#ratings" role="tab" aria-controls="ratings" aria-selected="false">
                             <i class="fas fa-star"></i> Ratings & Reviews
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" id="behavior-tab" data-toggle="tab" href="#behavior" role="tab">
+                        <a class="nav-link" id="behavior-tab" data-bs-toggle="tab" href="#behavior" role="tab" aria-controls="behavior" aria-selected="false">
                             <i class="fas fa-chart-line"></i> Activity History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" id="preferences-tab" data-toggle="tab" href="#preferences" role="tab">
+                        <a class="nav-link" id="preferences-tab" data-bs-toggle="tab" href="#preferences" role="tab" aria-controls="preferences" aria-selected="false">
                             <i class="fas fa-cog"></i> Preferences
                         </a>
                     </li>
@@ -470,16 +475,59 @@ let allUsers = []; // Store all users for filtering
 document.addEventListener('DOMContentLoaded', function() {
     loadExistingUsers();
     
+    // Check if user is already logged in from session
+    checkCurrentUser();
+    
     // Form event listeners
     document.getElementById('createUserForm').addEventListener('submit', createUser);
     document.getElementById('selectUserForm').addEventListener('submit', selectUser);
     document.getElementById('logoutUser').addEventListener('click', logoutUser);
+    document.getElementById('switchUser').addEventListener('click', switchUser);
     document.getElementById('preferencesForm').addEventListener('submit', savePreferences);
     
     // Search functionality
     document.getElementById('userSearch').addEventListener('input', filterUsers);
     document.getElementById('clearSearch').addEventListener('click', clearSearch);
+    
+    // Tab functionality
+    initializeTabs();
 });
+
+function checkCurrentUser() {
+    // First check if we have the user in global variable
+    if (window.currentUser) {
+        currentUser = window.currentUser;
+        displayCurrentUser();
+        loadUserActivity();
+        return;
+    }
+    
+    // If not, fetch from server session
+    fetch('/api/users/current')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.user) {
+                currentUser = data.user;
+                displayCurrentUser();
+                loadUserActivity();
+                // Update global variables
+                window.currentUser = data.user;
+                window.currentUserId = data.user.user_id;
+            } else {
+                // No user logged in, hide user sections and show selection interface
+                document.getElementById('currentUserInfo').style.display = 'none';
+                document.getElementById('userActivityTabs').style.display = 'none';
+                document.getElementById('userSelectionCard').style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking current user:', error);
+            // Hide user sections on error and show selection interface
+            document.getElementById('currentUserInfo').style.display = 'none';
+            document.getElementById('userActivityTabs').style.display = 'none';
+            document.getElementById('userSelectionCard').style.display = 'block';
+        });
+}
 
 function loadExistingUsers() {
     fetch('/api/users')
@@ -592,7 +640,7 @@ function createUser(event) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('User created successfully!');
+            showNotification('User created successfully!', 'success');
             document.getElementById('createUserForm').reset();
             loadExistingUsers();
             // Auto-select the new user
@@ -643,6 +691,11 @@ function selectUserById(userId) {
                 displayCurrentUser();
                 loadUserActivity();
                 loadExistingUsers(); // Refresh the user list
+                // Update global variables
+                window.currentUser = data.user;
+                window.currentUserId = data.user.user_id;
+                // Show success notification
+                showNotification('User profile created successfully!', 'success');
             } else {
                 alert('Error creating user profile: ' + data.error);
             }
@@ -660,6 +713,11 @@ function selectUserById(userId) {
                     currentUser = data.user;
                     displayCurrentUser();
                     loadUserActivity();
+                    // Update global variables
+                    window.currentUser = data.user;
+                    window.currentUserId = data.user.user_id;
+                    // Show success notification
+                    showNotification('User selected successfully!', 'success');
                 } else {
                     alert('Error loading user: ' + data.error);
                 }
@@ -685,9 +743,10 @@ function displayCurrentUser() {
     
     document.getElementById('currentUserInfo').style.display = 'block';
     document.getElementById('userActivityTabs').style.display = 'block';
+    document.getElementById('userSelectionCard').style.display = 'none';
     
-    // Save current user to localStorage for other pages
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    // Update global variables for other pages
+    window.currentUser = currentUser;
     window.currentUserId = currentUser.user_id;
 }
 
@@ -1093,7 +1152,17 @@ function resetPreferences() {
             currentUser.preferences = {};
         }
         
-        alert('Preferences reset to defaults!');
+        showNotification('Preferences reset to defaults!', 'success');
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // Use the global showNotification function if available, otherwise create a simple alert
+    if (typeof window.showNotification === 'function') {
+        window.showNotification(message, type);
+    } else {
+        // Fallback to simple alert
+        alert(message);
     }
 }
 
@@ -1130,15 +1199,105 @@ function editRating(laptopId, currentRating, currentComment) {
     }
 }
 
+function initializeTabs() {
+    // Initialize Bootstrap tabs
+    const tabTriggerList = [].slice.call(document.querySelectorAll('#activityTabs button[data-bs-toggle="tab"]'));
+    const tabList = tabTriggerList.map(function (tabTriggerEl) {
+        return new bootstrap.Tab(tabTriggerEl);
+    });
+    
+    // Add click event listeners to tabs
+    document.querySelectorAll('#activityTabs a[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetTab = this.getAttribute('href').substring(1);
+            showTab(targetTab);
+        });
+    });
+}
+
+function showTab(tabName) {
+    // Hide all tab panes
+    document.querySelectorAll('.tab-pane').forEach(function(pane) {
+        pane.classList.remove('show', 'active');
+    });
+    
+    // Remove active class from all tab links
+    document.querySelectorAll('#activityTabs .nav-link').forEach(function(link) {
+        link.classList.remove('active');
+        link.setAttribute('aria-selected', 'false');
+    });
+    
+    // Show the selected tab pane
+    const targetPane = document.getElementById(tabName);
+    if (targetPane) {
+        targetPane.classList.add('show', 'active');
+    }
+    
+    // Activate the selected tab link
+    const targetLink = document.querySelector(`#activityTabs a[href="#${tabName}"]`);
+    if (targetLink) {
+        targetLink.classList.add('active');
+        targetLink.setAttribute('aria-selected', 'true');
+    }
+    
+    // Load content for the tab if needed
+    if (tabName === 'ratings' && currentUser) {
+        loadRatingHistory();
+    } else if (tabName === 'behavior' && currentUser) {
+        loadBehaviorHistory();
+    } else if (tabName === 'preferences' && currentUser) {
+        loadUserPreferences();
+    }
+}
+
 function logoutUser() {
-    currentUser = null;
+    fetch('/api/users/logout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            currentUser = null;
+            document.getElementById('currentUserInfo').style.display = 'none';
+            document.getElementById('userActivityTabs').style.display = 'none';
+            document.getElementById('userSelectionCard').style.display = 'block';
+            document.getElementById('selectUserForm').reset();
+            
+            // Clear current user from global variables
+            window.currentUser = null;
+            window.currentUserId = null;
+            
+            // Hide user in navigation
+            if (typeof hideCurrentUserInNav === 'function') {
+                hideCurrentUserInNav();
+            }
+            
+            showNotification('Logged out successfully!', 'success');
+        } else {
+            showNotification('Error logging out: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error logging out:', error);
+        showNotification('Error logging out', 'error');
+    });
+}
+
+function switchUser() {
+    // Hide current user info and show user selection interface
     document.getElementById('currentUserInfo').style.display = 'none';
     document.getElementById('userActivityTabs').style.display = 'none';
-    document.getElementById('selectUserForm').reset();
+    document.getElementById('userSelectionCard').style.display = 'block';
     
-    // Clear current user from localStorage
-    localStorage.removeItem('currentUser');
-    window.currentUserId = null;
+    // Clear the search and reload users
+    document.getElementById('userSearch').value = '';
+    loadExistingUsers();
+    
+    showNotification('Please select a different user', 'info');
 }
 </script>
 {% endblock %}
