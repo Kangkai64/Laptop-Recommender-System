@@ -1091,7 +1091,6 @@ class LaptopDataExplorer:
         # Clean invalid specifications first
         self.clean_invalid_specifications(action='drop')
 
-        # Prepare the data
         # Prepare distributions with proper formatting
         brand_distribution = {}
         if 'brand_original' in self.df_laptop.columns:
@@ -1102,49 +1101,79 @@ class LaptopDataExplorer:
             brands = brands.replace(['', 'Nan', 'NaN', 'None'], 'Unknown')
             brand_distribution = brands.value_counts().to_dict()
 
-        # Prepare RAM distribution
+        # Prepare RAM distribution and ranges
         ram_distribution = {}
+        ram_ranges = {'min': 0, 'max': 0, 'mean': 0}
         if 'ram_gb' in self.df_laptop.columns:
             ram_values = self.df_laptop['ram_gb'].dropna()
-            ram_distribution = ram_values.astype(int).value_counts().sort_index().to_dict()
+            if len(ram_values) > 0:
+                ram_distribution = ram_values.astype(int).value_counts().sort_index().to_dict()
+                ram_ranges = {
+                    'min': int(ram_values.min()),
+                    'max': int(ram_values.max()),
+                    'mean': float(ram_values.mean())
+                }
 
-        # Prepare Storage distribution
+        # Prepare Storage distribution and ranges
         storage_distribution = {}
+        storage_ranges = {'min': 0, 'max': 0, 'mean': 0}
         if 'storage_gb' in self.df_laptop.columns:
             storage_values = self.df_laptop['storage_gb'].dropna()
-            storage_distribution = storage_values.astype(int).value_counts().sort_index().to_dict()
+            if len(storage_values) > 0:
+                storage_distribution = storage_values.astype(int).value_counts().sort_index().to_dict()
+                storage_ranges = {
+                    'min': int(storage_values.min()),
+                    'max': int(storage_values.max()),
+                    'mean': float(storage_values.mean())
+                }
+
+        # Add price ranges - prioritize MYR, fallback to USD
+        price_ranges = {'min': 0, 'max': 0, 'mean': 0, 'median': 0}
+        if 'price_myr' in self.df_laptop.columns:
+            price_data = self.df_laptop['price_myr'].dropna()
+            if len(price_data) > 0:
+                price_ranges = {
+                    'min': float(price_data.min()),
+                    'max': float(price_data.max()),
+                    'mean': float(price_data.mean()),
+                    'median': float(price_data.median())
+                }
+        elif 'price_usd' in self.df_laptop.columns:
+            price_data = self.df_laptop['price_usd'].dropna()
+            if len(price_data) > 0:
+                price_ranges = {
+                    'min': float(price_data.min()),
+                    'max': float(price_data.max()),
+                    'mean': float(price_data.mean()),
+                    'median': float(price_data.median())
+                }
+
+        # Prepare rating distribution
+        rating_distribution = {}
+        if 'average_rating' in self.df_laptop.columns:
+            rating_data = self.df_laptop['average_rating'].dropna()
+            if len(rating_data) > 0:
+                # Create star rating buckets (1-5 stars)
+                for star in range(1, 6):
+                    if star == 1:
+                        count = len(rating_data[(rating_data >= 1.0) & (rating_data < 2.0)])
+                    elif star == 5:
+                        count = len(rating_data[rating_data >= 4.5])
+                    else:
+                        count = len(rating_data[(rating_data >= star - 0.5) & (rating_data < star + 0.5)])
+                    rating_distribution[str(star)] = int(count)
 
         analysis = {
             'ram_distribution': ram_distribution,
             'storage_distribution': storage_distribution,
             'brand_distribution': brand_distribution,
-            'rating_distribution': self.df_laptop['average_rating'].value_counts().to_dict() if 'average_rating' in self.df_laptop.columns else {}
+            'rating_distribution': rating_distribution,
+            'price_ranges': price_ranges,
+            'ram_ranges': ram_ranges,
+            'storage_ranges': storage_ranges,
+            'total_records': int(len(self.df_laptop)),
+            'total_brands': len(brand_distribution),
         }
-        
-        # Add price ranges in both USD and MYR
-        price_ranges = {}
-        if 'price_usd' in self.df_laptop.columns:
-            price_ranges['usd'] = {
-                'min': float(self.df_laptop['price_usd'].min()),
-                'max': float(self.df_laptop['price_usd'].max()),
-                'mean': float(self.df_laptop['price_usd'].mean()),
-                'median': float(self.df_laptop['price_usd'].median())
-            }
-        if 'price_myr' in self.df_laptop.columns:
-            price_ranges['myr'] = {
-                'min': float(self.df_laptop['price_myr'].min()),
-                'max': float(self.df_laptop['price_myr'].max()),
-                'mean': float(self.df_laptop['price_myr'].mean()),
-                'median': float(self.df_laptop['price_myr'].median())
-            }
-        
-        analysis['price_ranges'] = price_ranges if price_ranges else {
-            'usd': {'min': 0, 'max': 0, 'mean': 0, 'median': 0},
-            'myr': {'min': 0, 'max': 0, 'mean': 0, 'median': 0}
-        }
-
-        if 'rating' in self.df_laptop.columns:
-            analysis['rating_distribution'] = self.df_laptop['rating'].value_counts().to_dict()
 
         return analysis
 

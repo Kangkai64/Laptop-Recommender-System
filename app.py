@@ -950,8 +950,26 @@ def api_load_more_laptops():
 
 @app.route('/api/analytics')
 def get_analytics():
-    explorer = LaptopDataExplorer()
-    return jsonify(explorer.create_json_for_analytics())
+    """API endpoint for analytics data using cached data."""
+    try:
+        if df_laptop is None or df_rating is None:
+            return jsonify({'error': 'Data not loaded. Please try again.'}), 500
+        
+        # Create explorer instance with already loaded data
+        explorer = LaptopDataExplorer()
+        explorer.df_laptop = df_laptop
+        explorer.df_rating = df_rating
+        
+        # Generate analytics data
+        analytics_data = explorer.create_json_for_analytics()
+        
+        return jsonify(analytics_data)
+        
+    except Exception as e:
+        logger.error(f"Error in analytics API: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):
