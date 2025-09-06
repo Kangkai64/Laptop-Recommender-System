@@ -443,9 +443,23 @@ def recommend():
                     brand_id = laptop['brand']
                     laptop['brand'] = recommender_system.preprocessor.brand_mapping.get(brand_id, brand_id)
             
+            # Get algorithm name for display
+            algorithm_names = {
+                'content_based': 'Content-Based Filtering',
+                'collaborative': 'Collaborative Filtering',
+                'hybrid': 'Hybrid Recommendation'
+            }
+            algorithm_name = algorithm_names.get(algorithm, 'Unknown Algorithm')
+            
+            # Get total number of reviews for display
+            total_reviews = len(df_rating) if df_rating is not None else 0
+            
             return render_template('recommendations.html', 
                                  recommendations=recommendations,
-                                 preferences=preferences)
+                                 preferences=preferences,
+                                 algorithm=algorithm,
+                                 algorithm_name=algorithm_name,
+                                 total_reviews=total_reviews)
         except Exception as e:
             flash(f'Error getting recommendations: {str(e)}', 'error')
             return render_template('recommend.html', error=str(e))
@@ -929,17 +943,12 @@ def analytics():
         'rating_distribution': {}
     }
     
-    # Create proper rating distribution (1-5 stars)
-    if 'average_rating' in df_laptop.columns:
+    # Create proper rating distribution (1-5 stars) using actual rating data
+    if df_rating is not None and 'rating' in df_rating.columns:
         rating_counts = {}
         for rating in range(1, 6):
-            # Count laptops with ratings in each star category
-            if rating == 1:
-                count = len(df_laptop[(df_laptop['average_rating'] >= 1.0) & (df_laptop['average_rating'] < 2.0)])
-            elif rating == 5:
-                count = len(df_laptop[df_laptop['average_rating'] >= 5.0])
-            else:
-                count = len(df_laptop[(df_laptop['average_rating'] >= rating) & (df_laptop['average_rating'] < rating + 1)])
+            # Count actual ratings in each star category
+            count = len(df_rating[df_rating['rating'] == rating])
             rating_counts[str(rating)] = int(count)
         analytics_data['rating_distribution'] = rating_counts
     
