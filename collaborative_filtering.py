@@ -674,18 +674,28 @@ class CollaborativeFiltering:
                 if price < budget_min or price > budget_max:
                     continue
             
-            # Brand filtering
+            # Brand preference (soft filtering - boost preferred brand but don't exclude others)
+            brand_boost = 1.0
             if 'brand_preference' in preferences and preferences['brand_preference']:
                 brand = laptop_data.get('brand', '')
-                if preferences['brand_preference'].lower() not in brand.lower():
-                    continue
+                if preferences['brand_preference'].lower() in brand.lower():
+                    brand_boost = 1.2  # 20% boost for preferred brand
             
             # RAM filtering
             if 'min_ram' in preferences:
                 # This would need RAM data in laptop details
                 pass
             
-            filtered_items.append((item_id, stats))
+            # Apply brand boost to the stats
+            if brand_boost != 1.0:
+                # Create a copy of stats and apply the boost
+                boosted_stats = stats.copy()
+                for key in boosted_stats:
+                    if isinstance(boosted_stats[key], (int, float)):
+                        boosted_stats[key] *= brand_boost
+                filtered_items.append((item_id, boosted_stats))
+            else:
+                filtered_items.append((item_id, stats))
         
         return filtered_items
 
