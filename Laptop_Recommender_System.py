@@ -33,29 +33,10 @@ warnings.filterwarnings('ignore')
 
 
 class LaptopRecommenderSystem:
-    """
-    Main Laptop Recommender System that combines multiple recommendation approaches.
-    
-    This class integrates:
-    1. Content-Based Filtering: Based on laptop features and specifications
-    2. Collaborative Filtering: Based on user behavior and preferences
-    3. Hybrid Recommendations: Combines both approaches for better results
-    
-    Attributes:
-        df_laptop (pd.DataFrame): Processed laptop dataset
-        df_rating (pd.DataFrame): Processed rating dataset
-        content_based_filter (ContentBasedFiltering): Content-based filtering instance
-        collaborative_filter (CollaborativeFiltering): Collaborative filtering instance
-        config (Dict): System configuration
-    """
+    """Main Laptop Recommender System that combines multiple recommendation approaches."""
     
     def __init__(self, config: Optional[Dict] = None):
-        """
-        Initialize the Laptop Recommender System.
-        
-        Args:
-            config: Optional configuration dictionary
-        """
+        """Initialize the Laptop Recommender System."""
         self.df_laptop = None
         self.df_rating = None
         self.content_based_filter = None
@@ -260,18 +241,7 @@ class LaptopRecommenderSystem:
     def get_hybrid_recommendations(self, user_id: int, preferences: Dict,
                                  n_recommendations: int = None,
                                  weights: Optional[Dict[str, float]] = None) -> List[Dict]:
-        """
-        Get hybrid recommendations combining both approaches.
-        
-        Args:
-            user_id: User ID for collaborative filtering
-            preferences: User preferences for content-based filtering
-            n_recommendations: Number of recommendations to return
-            weights: Weights for combining methods
-            
-        Returns:
-            List[Dict]: List of recommended laptops
-        """
+        """Get hybrid recommendations combining both approaches."""
         if n_recommendations is None:
             n_recommendations = self.config['system']['max_recommendations']
         
@@ -292,74 +262,8 @@ class LaptopRecommenderSystem:
                 user_id, 'hybrid', n_recommendations * 2
             )
             
-            # Combine recommendations
-            combined_recs = {}
-            
-            # Process content-based recommendations
-            for rec in content_based_recs:
-                asin = rec['asin']
-                if asin not in combined_recs:
-                    combined_recs[asin] = {
-                        'asin': asin,
-                        'title': rec['title'],
-                        'brand': rec['brand'],
-                        'price_myr': rec['price_myr'],
-                        'rating': rec['rating'],
-                        'combined_score': 0,
-                        'methods': [],
-                        'scores': {}
-                    }
-                
-                # Normalize content-based score
-                normalized_score = rec['similarity_score'] if 'similarity_score' in rec else rec.get('recommendation_score', 0)
-                combined_recs[asin]['combined_score'] += weights['content_based'] * normalized_score
-                combined_recs[asin]['methods'].append('content_based')
-                combined_recs[asin]['scores']['content_based'] = normalized_score
-            
-            # Process collaborative filtering recommendations
-            for rec in collaborative_recs:
-                asin = rec['asin']
-                if asin not in combined_recs:
-                    combined_recs[asin] = {
-                        'asin': asin,
-                        'title': rec['title'],
-                        'brand': rec['brand'],
-                        'price_myr': rec['price_myr'],
-                        'rating': rec['rating'],
-                        'combined_score': 0,
-                        'methods': [],
-                        'scores': {}
-                    }
-                
-                # Normalize collaborative filtering score
-                normalized_score = rec['recommendation_score']
-                combined_recs[asin]['combined_score'] += weights['collaborative'] * normalized_score
-                combined_recs[asin]['methods'].append('collaborative')
-                combined_recs[asin]['scores']['collaborative'] = normalized_score
-            
-            # Sort by combined score and get top recommendations
-            sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
-            top_recs = sorted_recs[:n_recommendations]
-            
-            # Format final recommendations
-            formatted_recommendations = []
-            for rec in top_recs:
-                formatted_rec = {
-                    'asin': rec['asin'],
-                    'title': rec['title'],
-                    'brand': rec['brand'],
-                    'price_myr': rec['price_myr'],
-                    'rating': rec['rating'],
-                    'recommendation_score': rec['combined_score'],
-                    'method': 'hybrid',
-                    'methods_used': rec['methods'],
-                    'individual_scores': rec['scores'],
-                    'explanation': f"Combined from {len(rec['methods'])} methods: {', '.join(rec['methods'])}"
-                }
-                formatted_recommendations.append(formatted_rec)
-            
-            logger.info(f"Generated {len(formatted_recommendations)} hybrid recommendations")
-            return formatted_recommendations
+            return self._combine_recommendations(content_based_recs, collaborative_recs, 
+                                               weights, n_recommendations, 'hybrid')
             
         except Exception as e:
             logger.error(f"Error getting hybrid recommendations: {str(e)}")
@@ -368,19 +272,7 @@ class LaptopRecommenderSystem:
     def get_hybrid_recommendations_auto(self, preferences: Dict,
                                       n_recommendations: int = None,
                                       weights: Optional[Dict[str, float]] = None) -> List[Dict]:
-        """
-        Get automatic hybrid recommendations combining content-based and collaborative approaches
-        without requiring a specific user_id. Analyzes the dataset to find laptops that match
-        both user preferences and popular user behavior patterns.
-        
-        Args:
-            preferences: User preferences for content-based filtering
-            n_recommendations: Number of recommendations to return
-            weights: Weights for combining methods
-            
-        Returns:
-            List[Dict]: List of recommended laptops
-        """
+        """Get automatic hybrid recommendations without requiring a specific user_id."""
         if n_recommendations is None:
             n_recommendations = self.config['system']['max_recommendations']
         
@@ -403,84 +295,88 @@ class LaptopRecommenderSystem:
                 preferences, n_recommendations * 2
             )
             
-            # Combine recommendations
-            combined_recs = {}
-            
-            # Process content-based recommendations
-            for rec in content_based_recs:
-                asin = rec['asin']
-                if asin not in combined_recs:
-                    combined_recs[asin] = {
-                        'asin': asin,
-                        'title': rec.get('title_y', rec.get('title', 'Unknown')),
-                        'brand': rec.get('brand', 'Unknown'),
-                        'price_myr': rec.get('price_myr', 0),
-                        'rating': rec.get('average_rating', rec.get('rating', 0)),
-                        'combined_score': 0,
-                        'methods': [],
-                        'scores': {}
-                    }
-                
-                # Normalize content-based score
-                normalized_score = rec.get('similarity_score', rec.get('recommendation_score', 0))
-                combined_recs[asin]['combined_score'] += weights['content_based'] * normalized_score
-                combined_recs[asin]['methods'].append('content_based')
-                combined_recs[asin]['scores']['content_based'] = normalized_score
-            
-            # Process collaborative filtering recommendations
-            for rec in collaborative_recs:
-                asin = rec['asin']
-                if asin not in combined_recs:
-                    combined_recs[asin] = {
-                        'asin': asin,
-                        'title': rec.get('title', 'Unknown'),
-                        'brand': rec.get('brand', 'Unknown'),
-                        'price_myr': rec.get('price_myr', 0),
-                        'rating': rec.get('rating', 0),
-                        'combined_score': 0,
-                        'methods': [],
-                        'scores': {}
-                    }
-                
-                # Normalize collaborative filtering score
-                normalized_score = rec.get('recommendation_score', 0)
-                combined_recs[asin]['combined_score'] += weights['collaborative'] * normalized_score
-                combined_recs[asin]['methods'].append('collaborative')
-                combined_recs[asin]['scores']['collaborative'] = normalized_score
-            
-            # Sort by combined score and get top recommendations
-            sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
-            top_recs = sorted_recs[:n_recommendations]
-            
-            # Format final recommendations
-            formatted_recommendations = []
-            for rec in top_recs:
-                # Get laptop_id from asin
-                laptop_row = self.df_laptop[self.df_laptop['asin'] == rec['asin']]
-                laptop_id = laptop_row['laptop_id'].iloc[0] if not laptop_row.empty else None
-                
-                formatted_rec = {
-                    'laptop_id': laptop_id,
-                    'asin': rec['asin'],
-                    'title_y': rec['title'],
-                    'brand': rec['brand'],
-                    'price_myr': rec['price_myr'],
-                    'average_rating': rec['rating'],
-                    'recommendation_score': rec['combined_score'],
-                    'method': 'hybrid_auto',
-                    'methods_used': rec['methods'],
-                    'individual_scores': rec['scores'],
-                    'explanation': f"Smart hybrid: matches your preferences + popular with similar users"
-                }
-                formatted_recommendations.append(formatted_rec)
-            
-            logger.info(f"Generated {len(formatted_recommendations)} automatic hybrid recommendations")
-            return formatted_recommendations
+            return self._combine_recommendations(content_based_recs, collaborative_recs, 
+                                               weights, n_recommendations, 'hybrid_auto')
             
         except Exception as e:
             logger.error(f"Error getting automatic hybrid recommendations: {str(e)}")
             raise
     
+    def _combine_recommendations(self, content_based_recs: List[Dict], 
+                                collaborative_recs: List[Dict], weights: Dict[str, float],
+                                n_recommendations: int, method: str) -> List[Dict]:
+        """Helper function to combine recommendations and reduce code duplication."""
+        combined_recs = {}
+        
+        # Process content-based recommendations
+        for rec in content_based_recs:
+            asin = rec['asin']
+            if asin not in combined_recs:
+                combined_recs[asin] = {
+                    'asin': asin,
+                    'title': rec.get('title_y', rec.get('title', 'Unknown')),
+                    'brand': rec.get('brand', 'Unknown'),
+                    'price_myr': rec.get('price_myr', 0),
+                    'rating': rec.get('average_rating', rec.get('rating', 0)),
+                    'combined_score': 0,
+                    'methods': [],
+                    'scores': {}
+                }
+            
+            normalized_score = rec.get('similarity_score', rec.get('recommendation_score', 0))
+            combined_recs[asin]['combined_score'] += weights['content_based'] * normalized_score
+            combined_recs[asin]['methods'].append('content_based')
+            combined_recs[asin]['scores']['content_based'] = normalized_score
+        
+        # Process collaborative filtering recommendations
+        for rec in collaborative_recs:
+            asin = rec['asin']
+            if asin not in combined_recs:
+                combined_recs[asin] = {
+                    'asin': asin,
+                    'title': rec.get('title', 'Unknown'),
+                    'brand': rec.get('brand', 'Unknown'),
+                    'price_myr': rec.get('price_myr', 0),
+                    'rating': rec.get('rating', 0),
+                    'combined_score': 0,
+                    'methods': [],
+                    'scores': {}
+                }
+            
+            normalized_score = rec.get('recommendation_score', 0)
+            combined_recs[asin]['combined_score'] += weights['collaborative'] * normalized_score
+            combined_recs[asin]['methods'].append('collaborative')
+            combined_recs[asin]['scores']['collaborative'] = normalized_score
+        
+        # Sort by combined score and get top recommendations
+        sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
+        top_recs = sorted_recs[:n_recommendations]
+        
+        # Format final recommendations
+        formatted_recommendations = []
+        for rec in top_recs:
+            # Get laptop_id from asin
+            laptop_row = self.df_laptop[self.df_laptop['asin'] == rec['asin']]
+            laptop_id = laptop_row['laptop_id'].iloc[0] if not laptop_row.empty else None
+            
+            formatted_rec = {
+                'laptop_id': laptop_id,
+                'asin': rec['asin'],
+                'title_y': rec['title'],
+                'brand': rec['brand'],
+                'price_myr': rec['price_myr'],
+                'average_rating': rec['rating'],
+                'recommendation_score': rec['combined_score'],
+                'method': method,
+                'methods_used': rec['methods'],
+                'individual_scores': rec['scores'],
+                'explanation': f"Smart hybrid: matches your preferences + popular with similar users" if method == 'hybrid_auto' else f"Combined from {len(rec['methods'])} methods: {', '.join(rec['methods'])}"
+            }
+            formatted_recommendations.append(formatted_rec)
+        
+        logger.info(f"Generated {len(formatted_recommendations)} {method} recommendations")
+        return formatted_recommendations
+
     def get_recommendations_by_use_case(self, use_case: str, budget: float = None,
                                        n_recommendations: int = None) -> List[Dict]:
         """

@@ -15,8 +15,6 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 import warnings
@@ -30,36 +28,11 @@ warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 
 class ContentBasedFiltering:
-    """
-    Content-Based Filtering algorithm for laptop recommendations.
-    
-    This class implements a comprehensive content-based filtering approach that:
-    1. Creates feature vectors from text, numerical, and categorical features
-    2. Computes similarity matrices using various metrics
-    3. Generates recommendations based on laptop similarity and user preferences
-    4. Provides explainable recommendations with feature importance analysis
-    
-    Attributes:
-        df_laptop (pd.DataFrame): Laptop dataset with features
-        df_rating (pd.DataFrame): Rating dataset with user reviews
-        feature_matrix (np.ndarray): Combined feature matrix
-        similarity_matrix (np.ndarray): Pre-computed similarity matrix
-        feature_names (List[str]): Names of features in the matrix
-        tfidf_vectorizer (TfidfVectorizer): TF-IDF vectorizer for text features
-        scaler (MinMaxScaler): Scaler for numerical features
-        config (Dict): Configuration parameters
-    """
+    """Content-Based Filtering algorithm for laptop recommendations."""
     
     def __init__(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
                  config: Optional[Dict] = None):
-        """
-        Initialize the Content-Based Filtering system.
-        
-        Args:
-            df_laptop: DataFrame containing laptop features
-            df_rating: DataFrame containing rating data
-            config: Optional configuration dictionary
-        """
+        """Initialize the Content-Based Filtering system."""
         self.df_laptop = df_laptop.copy()
         self.df_rating = df_rating.copy()
         self.feature_matrix = None
@@ -114,18 +87,7 @@ class ContentBasedFiltering:
                 self.config[section] = params
     
     def create_feature_matrix(self) -> np.ndarray:
-        """
-        Create comprehensive feature matrix combining all laptop features.
-        
-        This method:
-        1. Processes text features using TF-IDF vectorization
-        2. Normalizes numerical features using Min-Max scaling
-        3. Encodes categorical features
-        4. Combines all features into a unified matrix
-        
-        Returns:
-            np.ndarray: Combined feature matrix
-        """
+        """Create comprehensive feature matrix combining all laptop features."""
         logger.info("Creating feature matrix...")
         
         try:
@@ -193,14 +155,9 @@ class ContentBasedFiltering:
                 numerical_features_list.append(log_price)
                 numerical_feature_names.append('price_log')
             
-            # Note: Removed average_rating from similarity calculation
-            # as it can lead to incorrect similarity scores based on user preferences
-                # Add price with some noise to increase diversity
+            # Add price categories for better differentiation
+            if 'price_myr' in self.df_laptop.columns:
                 price_data = self.df_laptop['price_myr'].fillna(0)
-                numerical_features_list.append(price_data)
-                numerical_feature_names.append('price_myr')
-                
-                # Add price categories for better differentiation
                 price_categories = pd.cut(price_data, bins=5, labels=False, include_lowest=True)
                 numerical_features_list.append(price_categories.fillna(0))
                 numerical_feature_names.append('price_category')
@@ -503,28 +460,18 @@ class ContentBasedFiltering:
                 diversity_bonus = self._compute_diversity_bonus()
                 improved_similarity = improved_similarity * diversity_bonus
             
-            # 4. Ensure diagonal elements are 1.0 (perfect self-similarity)
-            np.fill_diagonal(improved_similarity, 1.0)
-            
-            # 5. Apply gentle scaling to ensure reasonable range without over-compression
+            # 4. Apply gentle scaling to ensure reasonable range
             min_score = improved_similarity.min()
             max_score = improved_similarity.max()
             
             # Only scale if the range is too narrow or too wide
             if max_score - min_score < 0.1:  # Too narrow
-                # Expand the range slightly
                 improved_similarity = 0.3 + (improved_similarity - min_score) / (max_score - min_score + 1e-8) * 0.6
             elif max_score - min_score > 0.8:  # Too wide
-                # Compress the range slightly
                 improved_similarity = 0.2 + (improved_similarity - min_score) / (max_score - min_score) * 0.7
             
-            # Ensure diagonal elements are still 1.0 after scaling
-            np.fill_diagonal(improved_similarity, 1.0)
-            
-            # Handle any NaN values that might have been created
+            # Handle any NaN values and ensure diagonal elements are 1.0
             improved_similarity = np.nan_to_num(improved_similarity, nan=0.5, posinf=1.0, neginf=0.0)
-            
-            # Ensure diagonal elements are still 1.0 after NaN handling
             np.fill_diagonal(improved_similarity, 1.0)
             
             logger.info(f"Applied similarity improvements - new range: {improved_similarity.min():.3f} - {improved_similarity.max():.3f}")

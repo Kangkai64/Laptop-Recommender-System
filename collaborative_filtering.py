@@ -20,11 +20,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 
 class CollaborativeFiltering:
-    """
-    Collaborative Filtering algorithm for laptop recommendations.
-    
-    Implements user-based, item-based, and matrix factorization approaches.
-    """
+    """Collaborative Filtering algorithm for laptop recommendations."""
     
     def __init__(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
                  config: Optional[Dict] = None):
@@ -555,36 +551,22 @@ class CollaborativeFiltering:
     
     def get_popular_recommendations(self, preferences: Dict = None, 
                                   n_recommendations: int = 10) -> List[Dict]:
-        """
-        Get popular recommendations based on overall user behavior patterns.
-        Analyzes the dataset to find laptops that users with similar criteria tend to choose.
-        
-        Args:
-            preferences: Optional user preferences for filtering
-            n_recommendations: Number of recommendations to return
-            
-        Returns:
-            List[Dict]: List of popular recommended laptops
-        """
+        """Get popular recommendations based on overall user behavior patterns."""
         if self.user_item_matrix is None:
             self.create_user_item_matrix()
         
         try:
-            logger.info("Generating popular recommendations based on user behavior patterns...")
+            logger.info("Generating popular recommendations...")
             
-            # Calculate popularity scores based on rating frequency and average ratings
+            # Calculate popularity scores
             item_stats = {}
-            
             for item_id in self.user_item_matrix.columns:
                 item_ratings = self.user_item_matrix[item_id]
                 non_zero_ratings = item_ratings[item_ratings > 0]
                 
                 if len(non_zero_ratings) > 0:
-                    # Popularity score combines frequency and average rating
                     frequency_score = len(non_zero_ratings) / len(self.user_item_matrix)
                     avg_rating = non_zero_ratings.mean()
-                    
-                    # Weighted popularity score
                     popularity_score = (0.6 * frequency_score) + (0.4 * avg_rating / 5.0)
                     
                     item_stats[item_id] = {
@@ -594,38 +576,9 @@ class CollaborativeFiltering:
                         'total_ratings': len(non_zero_ratings)
                     }
             
-            # Sort by popularity score
-            sorted_items = sorted(item_stats.items(), 
-                                key=lambda x: x[1]['popularity_score'], 
-                                reverse=True)
-            
-            # Apply preference filtering if provided
-            if preferences:
-                filtered_items = self._filter_by_preferences(sorted_items, preferences)
-                if len(filtered_items) > 0:
-                    sorted_items = filtered_items
-            
-            # Get top recommendations
-            top_items = sorted_items[:n_recommendations]
-            
-            # Format recommendations
-            recommendations = []
-            for item_id, stats in top_items:
-                laptop_data = self._get_laptop_details(item_id)
-                if laptop_data:
-                    recommendations.append({
-                        'asin': item_id,
-                        'title': laptop_data.get('title', 'Unknown'),
-                        'brand': laptop_data.get('brand', 'Unknown'),
-                        'price_myr': laptop_data.get('price_myr', 0),
-                        'rating': laptop_data.get('average_rating', 0),
-                        'recommendation_score': stats['popularity_score'],
-                        'method': 'popular_collaborative',
-                        'explanation': f"Popular choice: {stats['total_ratings']} ratings, avg {stats['avg_rating']:.1f} stars"
-                    })
-            
-            logger.info(f"Generated {len(recommendations)} popular recommendations")
-            return recommendations
+            return self._format_recommendations(item_stats, 'popularity_score', 
+                                              preferences, n_recommendations, 'popular_collaborative',
+                                              lambda stats: f"Popular choice: {stats['total_ratings']} ratings, avg {stats['avg_rating']:.1f} stars")
             
         except Exception as e:
             logger.error(f"Error getting popular recommendations: {str(e)}")
@@ -633,36 +586,23 @@ class CollaborativeFiltering:
     
     def get_trending_recommendations(self, preferences: Dict = None,
                                    n_recommendations: int = 10) -> List[Dict]:
-        """
-        Get trending recommendations based on recent user behavior patterns.
-        
-        Args:
-            preferences: Optional user preferences for filtering
-            n_recommendations: Number of recommendations to return
-            
-        Returns:
-            List[Dict]: List of trending recommended laptops
-        """
+        """Get trending recommendations based on recent user behavior patterns."""
         if self.user_item_matrix is None:
             self.create_user_item_matrix()
         
         try:
             logger.info("Generating trending recommendations...")
             
-            # Calculate trending scores based on rating patterns
+            # Calculate trending scores
             trending_scores = {}
-            
             for item_id in self.user_item_matrix.columns:
                 item_ratings = self.user_item_matrix[item_id]
                 non_zero_ratings = item_ratings[item_ratings > 0]
                 
                 if len(non_zero_ratings) >= 3:  # Minimum ratings for trending
-                    # Calculate trending score based on rating distribution
                     high_ratings = non_zero_ratings[non_zero_ratings >= 4.0]
                     trending_score = len(high_ratings) / len(non_zero_ratings)
-                    
-                    # Boost score for items with recent activity
-                    frequency_boost = min(len(non_zero_ratings) / 50, 1.0)  # Cap at 50 ratings
+                    frequency_boost = min(len(non_zero_ratings) / 50, 1.0)
                     trending_score = trending_score * (1 + frequency_boost)
                     
                     trending_scores[item_id] = {
@@ -671,43 +611,50 @@ class CollaborativeFiltering:
                         'total_ratings': len(non_zero_ratings)
                     }
             
-            # Sort by trending score
-            sorted_items = sorted(trending_scores.items(),
-                                key=lambda x: x[1]['trending_score'],
-                                reverse=True)
-            
-            # Apply preference filtering if provided
-            if preferences:
-                filtered_items = self._filter_by_preferences(sorted_items, preferences)
-                if len(filtered_items) > 0:
-                    sorted_items = filtered_items
-            
-            # Get top trending recommendations
-            top_items = sorted_items[:n_recommendations]
-            
-            # Format recommendations
-            recommendations = []
-            for item_id, stats in top_items:
-                laptop_data = self._get_laptop_details(item_id)
-                if laptop_data:
-                    recommendations.append({
-                        'asin': item_id,
-                        'title': laptop_data.get('title', 'Unknown'),
-                        'brand': laptop_data.get('brand', 'Unknown'),
-                        'price_myr': laptop_data.get('price_myr', 0),
-                        'rating': laptop_data.get('average_rating', 0),
-                        'recommendation_score': stats['trending_score'],
-                        'method': 'trending_collaborative',
-                        'explanation': f"Trending: {stats['high_rating_ratio']:.1%} high ratings"
-                    })
-            
-            logger.info(f"Generated {len(recommendations)} trending recommendations")
-            return recommendations
+            return self._format_recommendations(trending_scores, 'trending_score',
+                                              preferences, n_recommendations, 'trending_collaborative',
+                                              lambda stats: f"Trending: {stats['high_rating_ratio']:.1%} high ratings")
             
         except Exception as e:
             logger.error(f"Error getting trending recommendations: {str(e)}")
             raise
     
+    def _format_recommendations(self, item_stats: Dict, score_key: str, 
+                               preferences: Dict, n_recommendations: int, 
+                               method: str, explanation_func) -> List[Dict]:
+        """Helper function to format recommendations and reduce code duplication."""
+        # Sort by score
+        sorted_items = sorted(item_stats.items(), 
+                            key=lambda x: x[1][score_key], reverse=True)
+        
+        # Apply preference filtering if provided
+        if preferences:
+            filtered_items = self._filter_by_preferences(sorted_items, preferences)
+            if len(filtered_items) > 0:
+                sorted_items = filtered_items
+        
+        # Get top recommendations
+        top_items = sorted_items[:n_recommendations]
+        
+        # Format recommendations
+        recommendations = []
+        for item_id, stats in top_items:
+            laptop_data = self._get_laptop_details(item_id)
+            if laptop_data:
+                recommendations.append({
+                    'asin': item_id,
+                    'title': laptop_data.get('title', 'Unknown'),
+                    'brand': laptop_data.get('brand', 'Unknown'),
+                    'price_myr': laptop_data.get('price_myr', 0),
+                    'rating': laptop_data.get('average_rating', 0),
+                    'recommendation_score': stats[score_key],
+                    'method': method,
+                    'explanation': explanation_func(stats)
+                })
+        
+        logger.info(f"Generated {len(recommendations)} {method} recommendations")
+        return recommendations
+
     def _filter_by_preferences(self, items: List, preferences: Dict) -> List:
         """Filter items based on user preferences."""
         if not preferences:

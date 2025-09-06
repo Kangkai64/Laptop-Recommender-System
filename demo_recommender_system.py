@@ -1,12 +1,4 @@
-"""
-Demo Script for Laptop Recommender System
-
-This script demonstrates the capabilities of the Laptop Recommender System
-by showing various recommendation scenarios and use cases.
-
-Author: Laptop Recommender System Team
-License: MIT
-"""
+"""Demo Script for Laptop Recommender System."""
 
 import sys
 import logging

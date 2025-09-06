@@ -1,17 +1,4 @@
-"""
-Flask Web Application for Laptop Recommender System
-Based on SAUE (System Active, User Engage) approach
-
-This application provides an interactive web interface for users to:
-1. Input their preferences and requirements
-2. Receive personalized laptop recommendations
-3. Explore similar laptops
-4. View detailed laptop information
-5. Get system insights and analytics
-
-Author: Laptop Recommender System Team
-License: MIT
-"""
+"""Flask Web Application for Laptop Recommender System."""
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 import pandas as pd
