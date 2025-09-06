@@ -205,41 +205,58 @@
     {% endblock %}
 
     {% block footer_scripts %}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // Load the analytics data from the server
-        fetch('/api/analytics')
-            .then(response => response.json())
-            .then(data => {
-                updatePriceStats(data.price_ranges);
-                createRamChart(data.ram_distribution);
-                createStorageChart(data.storage_distribution);
-                createBrandChart(data.brand_distribution);
-                
-                // Update system statistics
-                document.getElementById('totalProducts').textContent = Object.values(data.brand_distribution).reduce((a, b) => a + b, 0);
-                document.getElementById('totalRecords').textContent = data.total_records;
-                document.getElementById('totalBrands').textContent = data.total_brands;
-                
-                // Update RAM and Storage ranges
-                document.getElementById('minRam').textContent = data.ram_ranges.min;
-                document.getElementById('maxRam').textContent = data.ram_ranges.max;
-                document.getElementById('avgRam').textContent = data.ram_ranges.mean.toFixed(1);
-                
-                document.getElementById('minStorage').textContent = data.storage_ranges.min;
-                document.getElementById('maxStorage').textContent = data.storage_ranges.max;
-                document.getElementById('avgStorage').textContent = data.storage_ranges.mean.toFixed(0);
-            });
+        // Load the analytics data from the server when page is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/analytics')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Analytics data loaded:', data);
+                    updatePriceStats(data.price_ranges);
+                    createRamChart(data.ram_distribution);
+                    createStorageChart(data.storage_distribution);
+                    createBrandChart(data.brand_distribution);
+                    
+                    // Update system statistics
+                    document.getElementById('totalProducts').textContent = Object.values(data.brand_distribution).reduce((a, b) => a + b, 0);
+                    document.getElementById('totalRecords').textContent = data.total_records;
+                    document.getElementById('totalBrands').textContent = data.total_brands;
+                    
+                    // Update RAM and Storage ranges
+                    document.getElementById('minRam').textContent = data.ram_ranges.min || 0;
+                    document.getElementById('maxRam').textContent = data.ram_ranges.max || 0;
+                    document.getElementById('avgRam').textContent = (data.ram_ranges.mean || 0).toFixed(1);
+                    
+                    document.getElementById('minStorage').textContent = data.storage_ranges.min || 0;
+                    document.getElementById('maxStorage').textContent = data.storage_ranges.max || 0;
+                    document.getElementById('avgStorage').textContent = (data.storage_ranges.mean || 0).toFixed(0);
+                })
+                .catch(error => {
+                    console.error('Error loading analytics data:', error);
+                    // Show fallback data
+                    document.getElementById('totalProducts').textContent = 'Error';
+                    document.getElementById('totalRecords').textContent = 'Error';
+                    document.getElementById('totalBrands').textContent = 'Error';
+                });
+        });
 
         function updatePriceStats(priceData) {
-            document.getElementById('minPrice').textContent = priceData.min.toFixed(2);
-            document.getElementById('maxPrice').textContent = priceData.max.toFixed(2);
-            document.getElementById('meanPrice').textContent = priceData.mean.toFixed(2);
-            document.getElementById('medianPrice').textContent = priceData.median.toFixed(2);
+            document.getElementById('minPrice').textContent = (priceData.min || 0).toFixed(2);
+            document.getElementById('maxPrice').textContent = (priceData.max || 0).toFixed(2);
+            document.getElementById('meanPrice').textContent = (priceData.mean || 0).toFixed(2);
+            document.getElementById('medianPrice').textContent = (priceData.median || 0).toFixed(2);
         }
 
         function createRamChart(ramData) {
             const ctx = document.getElementById('ramChart').getContext('2d');
+            
+            // Handle empty data
+            if (!ramData || Object.keys(ramData).length === 0) {
+                ramData = {'No Data': 0};
+            }
+            
             new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -264,6 +281,12 @@
 
         function createStorageChart(storageData) {
             const ctx = document.getElementById('storageChart').getContext('2d');
+            
+            // Handle empty data
+            if (!storageData || Object.keys(storageData).length === 0) {
+                storageData = {'No Data': 0};
+            }
+            
             new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -287,6 +310,11 @@
         }
 
         function createBrandChart(brandData) {
+            // Handle empty data
+            if (!brandData || Object.keys(brandData).length === 0) {
+                brandData = {'No Data': 0};
+            }
+            
             const sortedBrands = Object.entries(brandData)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 10);
@@ -314,14 +342,17 @@
             });
         }
 
-        $(document).ready(function() {
-            // Add any analytics-specific JavaScript here
+        // Additional analytics-specific functionality
+        document.addEventListener('DOMContentLoaded', function() {
             console.log('Analytics page loaded');
             
-            // Example: Add click tracking for analytics
-            $('.btn').on('click', function() {
-                const action = $(this).text().trim();
-                console.log('User clicked:', action);
+            // Add click tracking for analytics buttons
+            const buttons = document.querySelectorAll('.btn');
+            buttons.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const action = btn.textContent.trim();
+                    console.log('User clicked:', action);
+                });
             });
         });
     </script>
