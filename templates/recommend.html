@@ -38,7 +38,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text">RM</span>
                                         <input type="number" class="form-control" id="budget_max" name="budget_max" 
-                                               min="0" max="100000" value="50000" required>
+                                               min="0" max="100000" value="5000" required>
                                     </div>
                                 </div>
                             </div>
@@ -119,6 +119,66 @@
                                         <option value="512">512 GB</option>
                                         <option value="1000">1 TB</option>
                                         <option value="2000">2 TB</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Display & Graphics -->
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="fas fa-desktop me-2 text-primary"></i>
+                                Display & Graphics
+                            </h4>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="screen_size" class="form-label">Screen Size (Optional)</label>
+                                    <select class="form-select" id="screen_size" name="screen_size">
+                                        <option value="">Any Size</option>
+                                        <option value="11">11" - Ultra Portable</option>
+                                        <option value="13">13" - Portable</option>
+                                        <option value="14">14" - Balanced</option>
+                                        <option value="15">15" - Standard</option>
+                                        <option value="17">17" - Large</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="gpu_requirement" class="form-label">Graphics Requirements (Optional)</label>
+                                    <select class="form-select" id="gpu_requirement" name="gpu_requirement">
+                                        <option value="">Any Graphics</option>
+                                        <option value="integrated">Integrated Graphics (Basic tasks)</option>
+                                        <option value="dedicated">Dedicated Graphics (Gaming/Creative)</option>
+                                        <option value="high_end">High-end Graphics (Professional)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Battery & Portability -->
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="fas fa-battery-full me-2 text-primary"></i>
+                                Battery & Portability
+                            </h4>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="battery_life" class="form-label">Battery Life Priority (Optional)</label>
+                                    <select class="form-select" id="battery_life" name="battery_life">
+                                        <option value="">Not Important</option>
+                                        <option value="short">4-6 hours (Basic)</option>
+                                        <option value="medium">6-8 hours (Standard)</option>
+                                        <option value="long">8+ hours (Extended)</option>
+                                        <option value="all_day">12+ hours (All-day)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="weight_preference" class="form-label">Weight Preference (Optional)</label>
+                                    <select class="form-select" id="weight_preference" name="weight_preference">
+                                        <option value="">Any Weight</option>
+                                        <option value="ultra_light">Under 1.5kg (Ultra-light)</option>
+                                        <option value="light">1.5-2kg (Light)</option>
+                                        <option value="standard">2-2.5kg (Standard)</option>
+                                        <option value="heavy">Over 2.5kg (Performance focused)</option>
                                     </select>
                                 </div>
                             </div>

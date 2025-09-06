@@ -153,6 +153,7 @@
                             {% endfor %}
                         </span>
                         <span class="text-muted ms-2">({{ "%.1f"|format(laptop.average_rating or 0) }})</span>
+                        <span class="text-muted ms-1">• {{ laptop.rating_count or 0 }} ratings</span>
                     </div>
                     
                     <!-- Price -->
@@ -404,6 +405,7 @@ function createLaptopCard(laptop) {
                             ${generateStars(rating)}
                         </span>
                         <span class="text-muted ms-2">(${rating.toFixed(1)})</span>
+                        <span class="text-muted ms-1">• ${laptop.rating_count || 0} ratings</span>
                     </div>
                     
                     <div class="mb-3">

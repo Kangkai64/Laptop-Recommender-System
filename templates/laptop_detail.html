@@ -351,6 +351,131 @@
         </div>
     </div>
 
+    <!-- User Ratings Section -->
+    {% if laptop_ratings and laptop_ratings|length > 0 %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-star me-2 text-primary"></i>
+                        User Ratings & Reviews
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-chart-bar me-2 text-primary"></i>Rating Statistics</h6>
+                            <p class="text-muted">
+                                Total Ratings: <strong>{{ laptop_ratings|length }}</strong><br>
+                                Average Rating: <strong>{{ "%.2f"|format((laptop_ratings|map(attribute='rating')|list|sum) / laptop_ratings|length) }}</strong>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-users me-2 text-primary"></i>User Engagement</h6>
+                            <p class="text-muted">
+                                Unique Users: <strong>{{ laptop_ratings|map(attribute='user_id_encoded')|unique|list|length }}</strong><br>
+                                Rating Range: <strong>{{ laptop_ratings|map(attribute='rating')|min }} - {{ laptop_ratings|map(attribute='rating')|max }}</strong>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Rating Distribution -->
+                    <div class="mb-4">
+                        <h6><i class="fas fa-chart-pie me-2 text-primary"></i>Rating Distribution</h6>
+                        <div class="row">
+                            {% for rating in range(1, 6) %}
+                            {% set count = laptop_ratings|selectattr('rating', 'equalto', rating)|list|length %}
+                            {% set percentage = (count / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                            <div class="col-md-2 col-4 mb-2">
+                                <div class="text-center">
+                                    <div class="rating-bar-container" style="height: 100px; position: relative; background: #f8f9fa; border-radius: 5px; margin-bottom: 5px;">
+                                        <div class="rating-bar" style="position: absolute; bottom: 0; left: 0; right: 0; background: {% if rating >= 4 %}#28a745{% elif rating >= 3 %}#ffc107{% else %}#dc3545{% endif %}; height: {{ percentage }}%; border-radius: 0 0 5px 5px;"></div>
+                                        <div class="rating-count" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; color: #333;">{{ count }}</div>
+                                    </div>
+                                    <small class="text-muted">{{ rating }} Star{{ 's' if rating != 1 else '' }}</small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Ratings Table -->
+                    <div class="table-responsive">
+                        <h6><i class="fas fa-list me-2 text-primary"></i>Recent Ratings</h6>
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>Rating</th>
+                                    <th>Date</th>
+                                    <th>Review</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rating in laptop_ratings[:10] %}
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-secondary">User {{ rating.user_id_encoded }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="rating-stars">
+                                            {% for i in range(5) %}
+                                                {% if i < rating.rating %}
+                                                    <i class="fas fa-star text-warning"></i>
+                                                {% else %}
+                                                    <i class="far fa-star text-muted"></i>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </span>
+                                        <span class="ms-2 fw-bold">{{ rating.rating }}</span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {% if rating.timestamp %}
+                                                {% if rating.timestamp is string %}
+                                                    {{ rating.timestamp }}
+                                                {% else %}
+                                                    {{ rating.timestamp.strftime('%B %d, %Y') }}
+                                                {% endif %}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if rating.text_clean %}
+                                            <div class="review-text" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ rating.text_clean }}">
+                                                {{ rating.text_clean[:100] }}{% if rating.text_clean|length > 100 %}...{% endif %}
+                                            </div>
+                                        {% elif rating.text %}
+                                            <div class="review-text" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ rating.text }}">
+                                                {{ rating.text[:100] }}{% if rating.text|length > 100 %}...{% endif %}
+                                            </div>
+                                        {% else %}
+                                            <span class="text-muted">No review text</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% if laptop_ratings|length > 10 %}
+                        <div class="text-center mt-3">
+                            <small class="text-muted">Showing 10 of {{ laptop_ratings|length }} ratings</small>
+                            <br>
+                            <a href="{{ url_for('rating_details', laptop_id=laptop.laptop_id) }}" class="btn btn-outline-primary btn-sm mt-2">
+                                <i class="fas fa-eye me-1"></i>See All Ratings
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Media Section -->
     {% if videos and videos|length > 0 %}
     <div class="row mt-4">
@@ -611,118 +736,6 @@
     {% endif %}
 
 
-    <!-- User Ratings Section -->
-    {% if laptop_ratings and laptop_ratings|length > 0 %}
-    <div class="row mt-5">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="fas fa-star me-2 text-primary"></i>
-                        User Ratings & Reviews
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6><i class="fas fa-chart-bar me-2 text-primary"></i>Rating Statistics</h6>
-                            <p class="text-muted">
-                                Total Ratings: <strong>{{ laptop_ratings|length }}</strong><br>
-                                Average Rating: <strong>{{ "%.2f"|format((laptop_ratings|map(attribute='rating')|list|sum) / laptop_ratings|length) }}</strong>
-                            </p>
-                        </div>
-                        <div class="col-md-6">
-                            <h6><i class="fas fa-users me-2 text-primary"></i>User Engagement</h6>
-                            <p class="text-muted">
-                                Unique Users: <strong>{{ laptop_ratings|map(attribute='user_id_encoded')|unique|list|length }}</strong><br>
-                                Rating Range: <strong>{{ laptop_ratings|map(attribute='rating')|min }} - {{ laptop_ratings|map(attribute='rating')|max }}</strong>
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <!-- Rating Distribution -->
-                    <div class="mb-4">
-                        <h6><i class="fas fa-chart-pie me-2 text-primary"></i>Rating Distribution</h6>
-                        <div class="row">
-                            {% for rating in range(1, 6) %}
-                            {% set count = laptop_ratings|selectattr('rating', 'equalto', rating)|list|length %}
-                            {% set percentage = (count / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
-                            <div class="col-md-2 col-4 mb-2">
-                                <div class="text-center">
-                                    <div class="rating-bar-container" style="height: 100px; position: relative; background: #f8f9fa; border-radius: 5px; margin-bottom: 5px;">
-                                        <div class="rating-bar" style="position: absolute; bottom: 0; left: 0; right: 0; background: {% if rating >= 4 %}#28a745{% elif rating >= 3 %}#ffc107{% else %}#dc3545{% endif %}; height: {{ percentage }}%; border-radius: 0 0 5px 5px;"></div>
-                                        <div class="rating-count" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; color: #333;">{{ count }}</div>
-                                    </div>
-                                    <small class="text-muted">{{ rating }} Star{{ 's' if rating != 1 else '' }}</small>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    
-                    <!-- Recent Ratings Table -->
-                    <div class="table-responsive">
-                        <h6><i class="fas fa-list me-2 text-primary"></i>Recent Ratings</h6>
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>User ID</th>
-                                    <th>Rating</th>
-                                    <th>Date</th>
-                                    <th>Review</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for rating in laptop_ratings[:10] %}
-                                <tr>
-                                    <td>
-                                        <span class="badge bg-secondary">User {{ rating.user_id_encoded }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="rating-stars">
-                                            {% for i in range(5) %}
-                                                {% if i < rating.rating %}
-                                                    <i class="fas fa-star text-warning"></i>
-                                                {% else %}
-                                                    <i class="far fa-star text-muted"></i>
-                                                {% endif %}
-                                            {% endfor %}
-                                        </span>
-                                        <span class="ms-2 fw-bold">{{ rating.rating }}</span>
-                                    </td>
-                                    <td>
-                                        <small class="text-muted">
-                                            {% if rating.timestamp %}
-                                                {{ rating.timestamp }}
-                                            {% else %}
-                                                N/A
-                                            {% endif %}
-                                        </small>
-                                    </td>
-                                    <td>
-                                        {% if rating.text %}
-                                            <div class="review-text" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ rating.text }}">
-                                                {{ rating.text[:100] }}{% if rating.text|length > 100 %}...{% endif %}
-                                            </div>
-                                        {% else %}
-                                            <span class="text-muted">No review text</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                        {% if laptop_ratings|length > 10 %}
-                        <div class="text-center mt-3">
-                            <small class="text-muted">Showing 10 of {{ laptop_ratings|length }} ratings</small>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
     <!-- Quick Actions -->
     <div class="row mt-5">

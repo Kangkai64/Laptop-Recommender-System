@@ -330,6 +330,7 @@ def normalize_recommendations(recommendations: List[Dict]) -> List[Dict]:
         # Price
         if 'price_myr' not in r:
             r['price_myr'] = 0.0
+            
         # Ensure laptop_id (via asin lookup)
         if 'laptop_id' not in r:
             asin = r.get('asin')
@@ -372,6 +373,10 @@ def recommend():
             'processor_type': request.form.get('processor_type', ''),
             'ram_min': int(request.form.get('ram_min', 4)),
             'storage_min': int(request.form.get('storage_min', 256)),
+            'screen_size': request.form.get('screen_size', ''),
+            'gpu_requirement': request.form.get('gpu_requirement', ''),
+            'battery_life': request.form.get('battery_life', ''),
+            'weight_preference': request.form.get('weight_preference', ''),
             'use_case': request.form.get('use_case', 'general'),
             'priority': request.form.get('priority', 'performance')
         }
@@ -396,6 +401,10 @@ def recommend():
                     'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
                     'min_ram': preferences['ram_min'],
                     'min_storage': preferences['storage_min'],
+                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
+                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
+                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
+                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
                     'use_case': preferences['use_case'],
                     'priority': preferences['priority']
                 }
@@ -410,6 +419,10 @@ def recommend():
                     'budget_range': (preferences['budget_min'], preferences['budget_max']),
                     'brand_preference': preferences['brand'] if preferences['brand'] else None,
                     'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
+                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
+                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
+                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
                     'min_ram': preferences['ram_min'],
                     'min_storage': preferences['storage_min'],
                     'use_case': preferences['use_case'],
@@ -555,6 +568,9 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
             elif 'average_rating' not in rec:
                 rec['average_rating'] = 0.0
             
+            # Add rating count
+            rec['rating_count'] = get_rating_count_for_laptop(rec.get('asin'))
+            
         return recommendations
     except Exception as e:
         try:
@@ -570,6 +586,12 @@ def get_recommendations(preferences: Dict) -> List[Dict]:
             # Final fallback: return sample laptops filtered by budget
             logger.warning(f"Recommendation methods failed, using fallback: {e2}")
             return get_fallback_recommendations(preferences)
+
+def get_rating_count_for_laptop(laptop_asin: str) -> int:
+    """Get the number of ratings for a specific laptop."""
+    if df_rating is None or 'asin' not in df_rating.columns or not laptop_asin:
+        return 0
+    return len(df_rating[df_rating['asin'] == laptop_asin])
 
 def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
     """Fallback method to get recommendations when main methods fail."""
@@ -637,6 +659,9 @@ def get_fallback_recommendations(preferences: Dict) -> List[Dict]:
         if 'price_myr' not in laptop_dict:
             laptop_dict['price_myr'] = 0.0
         
+        # Add rating count
+        laptop_dict['rating_count'] = get_rating_count_for_laptop(laptop_dict.get('asin'))
+        
         # Add recommendation score
         laptop_dict['recommendation_score'] = 0.8  # Default score
         laptop_dict['method'] = 'fallback'
@@ -675,6 +700,9 @@ def explore():
         laptop_dict['features'] = laptop_dict.get('features_clean', '')
         laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))  # Include images
         laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))  # Include videos
+        
+        # Add rating count
+        laptop_dict['rating_count'] = get_rating_count_for_laptop(laptop_dict.get('asin'))
         
         # Ensure brand is available
         if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:
@@ -747,11 +775,74 @@ def laptop_detail(laptop_id):
         laptop_asin = laptop.get('asin')
         if laptop_asin:
             laptop_ratings = df_rating[df_rating['asin'] == laptop_asin].to_dict('records')
+            # Ensure text columns are properly handled
+            for rating in laptop_ratings:
+                # If text_clean exists but text doesn't, copy text_clean to text for backward compatibility
+                if 'text_clean' in rating and 'text' not in rating:
+                    rating['text'] = rating['text_clean']
+                # If neither exists, add empty text
+                if 'text' not in rating and 'text_clean' not in rating:
+                    rating['text'] = ''
     
     return render_template('laptop_detail.html', 
                          laptop=laptop, 
                          similar_laptops=similar_laptops,
                          videos=videos,
+                         laptop_ratings=laptop_ratings)
+
+@app.route('/laptop/<int:laptop_id>/ratings')
+def rating_details(laptop_id):
+    """Rating details page showing all ratings for a specific laptop."""
+    # Get laptop data
+    laptop = recommender_system.get_laptop_by_id(laptop_id)
+    
+    if not laptop:
+        flash('Laptop not found.', 'error')
+        return redirect(url_for('index'))
+    
+    # Map brand ID to actual brand name if needed
+    if laptop and 'brand' in laptop:
+        laptop['brand'] = recommender_system.preprocessor.brand_mapping.get(
+            laptop['brand'], 
+            laptop['brand']
+        )
+    
+    # Get all rating data for this laptop
+    laptop_ratings = []
+    if df_rating is not None and 'asin' in df_rating.columns:
+        laptop_asin = laptop.get('asin')
+        if laptop_asin:
+            laptop_ratings = df_rating[df_rating['asin'] == laptop_asin].to_dict('records')
+            # Ensure text columns are properly handled
+            for rating in laptop_ratings:
+                # If text_clean exists but text doesn't, copy text_clean to text for backward compatibility
+                if 'text_clean' in rating and 'text' not in rating:
+                    rating['text'] = rating['text_clean']
+                # If neither exists, add empty text
+                if 'text' not in rating and 'text_clean' not in rating:
+                    rating['text'] = ''
+                # Format timestamp if it exists
+                if 'timestamp' in rating and rating['timestamp']:
+                    try:
+                        # Convert to datetime if it's a string
+                        if isinstance(rating['timestamp'], str):
+                            # Handle comma-separated timestamp format
+                            ts_str = rating['timestamp'].replace(',', '')
+                            if ts_str.isdigit() and len(ts_str) > 10:
+                                # Convert from milliseconds to seconds
+                                ts_seconds = int(ts_str) / 1000
+                                rating['timestamp'] = pd.to_datetime(ts_seconds, unit='s')
+                            else:
+                                rating['timestamp'] = pd.to_datetime(rating['timestamp'])
+                    except:
+                        rating['timestamp'] = None
+    
+    # Sort ratings by timestamp (newest first) if available
+    if laptop_ratings and 'timestamp' in laptop_ratings[0]:
+        laptop_ratings.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+    
+    return render_template('rating_details.html', 
+                         laptop=laptop, 
                          laptop_ratings=laptop_ratings)
 
 @app.route('/search')
@@ -795,6 +886,9 @@ def search():
         laptop_dict['average_rating'] = laptop_dict.get('average_rating', 0.0)
         laptop_dict['images'] = extract_image_urls(laptop_dict.get('images_y'))  # Include images
         laptop_dict['videos'] = extract_video_urls(laptop_dict.get('videos'), laptop_dict.get('title_y'), laptop_dict.get('brand'))  # Include videos
+        
+        # Add rating count
+        laptop_dict['rating_count'] = get_rating_count_for_laptop(laptop_dict.get('asin'))
         
         # Ensure brand is available
         if 'brand' not in laptop_dict and 'brand_encoded' in laptop_dict:

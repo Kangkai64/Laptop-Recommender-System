@@ -104,6 +104,7 @@
                                     {% endfor %}
                                 </span>
                                 <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
+                                <span class="text-muted ms-1">• {{ laptop.rating_count or 0 }} ratings</span>
                             </div>
                             
                             <!-- Price -->
@@ -198,22 +199,36 @@
                             </div>
                             
                             <!-- Similarity Score -->
-                            {% if laptop.similarity_score %}
                             <div class="mb-3">
-                                {% set score_percent = (laptop.similarity_score * 100)|round(1) %}
-                                {% set bar_color = 'bg-danger' if score_percent >= 80 else 'bg-warning' if score_percent >= 60 else 'bg-info' if score_percent >= 40 else 'bg-secondary' %}
-                                {% set score_label = 'Excellent Match' if score_percent >= 80 else 'Good Match' if score_percent >= 60 else 'Moderate Match' if score_percent >= 40 else 'Fair Match' %}
+                                {% if laptop.similarity_score %}
+                                    {% set score_percent = (laptop.similarity_score * 100)|round(1) %}
+                                    {% set bar_color = 'bg-success' if score_percent >= 85 else 'bg-primary' if score_percent >= 70 else 'bg-warning' if score_percent >= 55 else 'bg-info' %}
+                                    {% set score_label = 'Excellent Match' if score_percent >= 85 else 'Very Good Match' if score_percent >= 70 else 'Good Match' if score_percent >= 55 else 'Fair Match' %}
+                                    {% set score_icon = 'fas fa-star' if score_percent >= 85 else 'fas fa-thumbs-up' if score_percent >= 70 else 'fas fa-check' if score_percent >= 55 else 'fas fa-info-circle' %}
+                                {% else %}
+                                    {% set score_percent = 0 %}
+                                    {% set bar_color = 'bg-secondary' %}
+                                    {% set score_label = 'Score Not Available' %}
+                                    {% set score_icon = 'fas fa-question-circle' %}
+                                {% endif %}
                                 
-                                <div class="progress" style="height: 8px;">
-                                    <!-- stylelint-disable-next-line -->
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="{{ score_icon }} me-2 text-primary"></i>
+                                    <small class="text-muted fw-bold">{{ score_label }}</small>
+                                </div>
+                                <div class="progress" style="height: 10px; border-radius: 5px;">
                                     <div class="progress-bar {{ bar_color }}" 
-                                         style="width: {{ score_percent }}%"></div>
+                                         style="width: {{ score_percent }}%; border-radius: 5px;"
+                                         role="progressbar" 
+                                         aria-valuenow="{{ score_percent }}" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                    </div>
                                 </div>
                                 <small class="text-muted">
-                                    <strong>{{ score_label }}:</strong> {{ score_percent }}% match
+                                    <strong>{{ score_percent }}%</strong> compatibility with your preferences
                                 </small>
                             </div>
-                            {% endif %}
                         </div>
                         
                         <div class="card-footer bg-transparent">

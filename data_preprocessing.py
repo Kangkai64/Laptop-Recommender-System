@@ -295,14 +295,18 @@ class LaptopDataPreprocessor:
         
         df_normalized = df_rating.copy()
         
-        # 1. Normalize numerical columns (except ratings which should stay in 1-5 range)
-        numerical_columns = ['helpful_vote']  # Removed rating to keep it in 1-5 range
+        # 1. Normalize numerical columns (except ratings and helpful_vote which should stay as integers)
+        numerical_columns = []  # Removed helpful_vote to keep it as integer values
         available_numerical = [col for col in numerical_columns if col in df_normalized.columns]
         
         if available_numerical:
             scaler = MinMaxScaler()
             df_normalized[available_numerical] = scaler.fit_transform(df_normalized[available_numerical].fillna(0))
             self.scalers['rating_numerical'] = scaler
+        
+        # Ensure helpful_vote is integer
+        if 'helpful_vote' in df_normalized.columns:
+            df_normalized['helpful_vote'] = df_normalized['helpful_vote'].fillna(0).astype(int)
         
         # 2. Encode user_id
         if 'user_id' in df_normalized.columns:
@@ -318,13 +322,33 @@ class LaptopDataPreprocessor:
         
         # 4. Convert timestamp to datetime features
         if 'timestamp' in df_normalized.columns:
-            df_normalized['timestamp'] = pd.to_datetime(df_normalized['timestamp'], errors='coerce')
-            df_normalized['year'] = df_normalized['timestamp'].dt.year
-            df_normalized['month'] = df_normalized['timestamp'].dt.month
-            df_normalized['day_of_week'] = df_normalized['timestamp'].dt.dayofweek
+            # Handle comma-separated timestamp format (e.g., "1,601,466,998,245")
+            def parse_timestamp(ts):
+                if pd.isna(ts) or ts is None:
+                    return None
+                try:
+                    # Convert to string and remove commas
+                    ts_str = str(ts).replace(',', '')
+                    # Try to parse as Unix timestamp (milliseconds)
+                    if ts_str.isdigit() and len(ts_str) > 10:
+                        # Convert from milliseconds to seconds
+                        ts_seconds = int(ts_str) / 1000
+                        return pd.to_datetime(ts_seconds, unit='s')
+                    else:
+                        # Try regular datetime parsing
+                        return pd.to_datetime(ts_str, errors='coerce')
+                except (ValueError, TypeError):
+                    return None
+            
+            df_normalized['timestamp'] = df_normalized['timestamp'].apply(parse_timestamp)
+            # Format timestamp to DD/MM/YYYY hh:mm format
+            df_normalized['timestamp'] = df_normalized['timestamp'].dt.strftime('%d/%m/%Y %H:%M')
+            df_normalized['year'] = df_normalized['timestamp'].apply(lambda x: int(x.split('/')[2].split(' ')[0]) if pd.notna(x) else None)
+            df_normalized['month'] = df_normalized['timestamp'].apply(lambda x: int(x.split('/')[1]) if pd.notna(x) else None)
+            df_normalized['day_of_week'] = df_normalized['timestamp'].apply(lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M').dayofweek if pd.notna(x) else None)
         
         # 5. Keep only essential columns and cleaned versions
-        essential_columns = ['asin', 'parent_asin', 'user_id_encoded', 'rating', 'helpful_vote']
+        essential_columns = ['asin', 'parent_asin', 'user_id_encoded', 'timestamp', 'rating', 'helpful_vote']
         clean_columns = [col for col in df_normalized.columns if col.endswith('_clean')]
         temporal_columns = ['year', 'month', 'day_of_week']
         
