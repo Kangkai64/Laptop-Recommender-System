@@ -673,19 +673,6 @@ class ContentBasedFiltering:
                     ]
                     logger.info(f"Budget filtering applied: RM {budget_min} - RM {budget_max}, {len(filtered_df)} laptops remaining")
             
-            # Handle brand filtering
-            if 'brand_preference' in preferences and preferences['brand_preference']:
-                brand_name = preferences['brand_preference']
-                # Check both 'brand' and 'brand_encoded' columns
-                if 'brand' in filtered_df.columns:
-                    brand_mask = filtered_df['brand'].str.lower() == brand_name.lower()
-                    filtered_df = filtered_df[brand_mask]
-                    logger.info(f"Brand filtering applied: {brand_name}, {len(filtered_df)} laptops remaining")
-                elif 'brand_encoded' in filtered_df.columns:
-                    # If only encoded brand is available, we need to find the encoded value
-                    # This is a fallback - ideally we should have the original brand names
-                    logger.warning(f"Only encoded brand available, cannot filter by brand name: {brand_name}")
-            
             # If no laptops match budget, return empty list
             if len(filtered_df) == 0:
                 logger.warning("No laptops match the specified budget range")
