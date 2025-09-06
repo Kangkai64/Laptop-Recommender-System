@@ -261,6 +261,22 @@
         .badge.bg-info {
             background-color: #17a2b8 !important;
         }
+        
+        .feature-card {
+            height: 100%;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--secondary-color);
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
