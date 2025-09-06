@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Your Recommendations - Laptop Recommender System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header -->
+    <div class="row mb-5">
+        <div class="col-lg-8">
+            <h1 class="fw-bold mb-3">Your Personalized Recommendations</h1>
+            <p class="lead text-muted">
+                Based on your preferences, here are the best laptops that match your requirements.
+            </p>
+        </div>
+        <div class="col-lg-4 text-lg-end">
+            <a href="{{ url_for('recommend') }}" class="btn btn-outline-primary">
+                <i class="fas fa-edit me-2"></i>Modify Preferences
+            </a>
+        </div>
+    </div>
+
+    <!-- Preferences Summary -->
+    <div class="card mb-4 bg-light">
+        <div class="card-body">
+            <h5 class="card-title">
+                <i class="fas fa-cog me-2 text-primary"></i>
+                Your Preferences Summary
+            </h5>
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Budget:</strong><br>
+                    RM {{ "%.2f"|format(preferences.budget_min) }} - RM {{ "%.2f"|format(preferences.budget_max) }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Brand:</strong><br>
+                    {{ preferences.brand if preferences.brand else 'Any Brand' }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Use Case:</strong><br>
+                    {{ preferences.use_case|title }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Priority:</strong><br>
+                    {{ preferences.priority|title }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    {% if recommendations %}
+        <div class="row g-4">
+            {% for laptop in recommendations %}
+                <div class="col-lg-3 col-md-6 mb-4">
+                    <div class="card laptop-card h-100">
+                        <!-- Laptop Image -->
+                        {% if laptop.images and laptop.images|length > 0 %}
+                            {% if laptop.images is string and laptop.images != 'null' and laptop.images != '' %}
+                                <img src="{{ laptop.images }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% elif laptop.images is sequence and laptop.images|length > 0 and laptop.images[0] and laptop.images[0] != 'null' and laptop.images[0] != '' %}
+                                <img src="{{ laptop.images[0] }}" class="card-img-top" alt="{{ laptop.title_y }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="card-img-top-placeholder" style="display: none;">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% else %}
+                                <div class="card-img-top-placeholder">
+                                    <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="card-img-top-placeholder">
+                                <i class="fas fa-laptop" style="font-size: 3rem;"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="card-body">
+                            <!-- Title and Brand -->
+                            {% set title = laptop.title_y if laptop.title_y else laptop.title %}
+                            <h5 class="card-title">{{ title[:100] }}{% if title|length > 100 %}...{% endif %}</h5>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-tag me-1"></i>
+                                {% if laptop.brand and laptop.brand != 'Unknown Brand' %}
+                                    {{ laptop.brand }}
+                                {% else %}
+                                    Brand {{ laptop.brand_encoded if laptop.brand_encoded else 'Unknown' }}
+                                {% endif %}
+                            </p>
+                            
+                            <!-- Rating -->
+                            <div class="mb-2">
+                                <span class="rating-stars">
+                                    {% set rating = laptop.average_rating if laptop.average_rating else laptop.rating %}
+                                    {% for i in range(5) %}
+                                        {% if i < rating|int %}
+                                            <i class="fas fa-star text-warning"></i>
+                                        {% elif rating % 1 >= 0.5 and i == rating|int %}
+                                            <i class="fas fa-star-half-alt text-warning"></i>
+                                        {% else %}
+                                            <i class="far fa-star text-warning"></i>
+                                        {% endif %}
+                                    {% endfor %}
+                                </span>
+                                <span class="text-muted ms-2">({{ "%.1f"|format(rating) }})</span>
+                            </div>
+                            
+                            <!-- Price -->
+                            <div class="mb-3">
+                                <span class="price-tag">
+                                    RM {{ "%.2f"|format(laptop.price_myr if laptop.price_myr else 0) }}
+                                </span>
+                            </div>
+                            
+                            <!-- Technical Specifications -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    {% if laptop.ram_gb or laptop.storage_gb or laptop.screen_size_inches %}
+                                        <div class="specs-summary">
+                                            {% if laptop.ram_gb %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-memory me-1"></i>{{ laptop.ram_gb }}GB RAM
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.storage_gb %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-hdd me-1"></i>
+                                                    {% if laptop.storage_gb >= 1024 %}
+                                                        {{ "%.1f"|format(laptop.storage_gb/1024) }} TB
+                                                    {% else %}
+                                                        {{ laptop.storage_gb }} GB
+                                                    {% endif %}
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.screen_size_inches %}
+                                                <span class="badge bg-info me-1 mb-1">
+                                                    <i class="fas fa-desktop me-1"></i>{{ laptop.screen_size_inches }}"
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- Performance Indicators -->
+                                    {% if laptop.performance_tier or laptop.gaming_capability %}
+                                        <div class="performance-summary mt-2">
+                                            {% if laptop.performance_tier %}
+                                                <span class="badge 
+                                                    {% if laptop.performance_tier == 'Ultra High' %}bg-danger
+                                                    {% elif laptop.performance_tier == 'High' %}bg-success
+                                                    {% elif laptop.performance_tier == 'Medium-High' %}bg-warning
+                                                    {% else %}bg-info{% endif %} me-1 mb-1">
+                                                    <i class="fas fa-star me-1"></i>{{ laptop.performance_tier }}
+                                                </span>
+                                            {% endif %}
+                                            {% if laptop.gaming_capability %}
+                                                <span class="badge 
+                                                    {% if laptop.gaming_capability == 'High-End Gaming' %}bg-danger
+                                                    {% elif laptop.gaming_capability == 'Mid-Range Gaming' %}bg-warning
+                                                    {% elif laptop.gaming_capability == 'Casual Gaming' %}bg-info
+                                                    {% else %}bg-secondary{% endif %} me-1 mb-1">
+                                                    <i class="fas fa-gamepad me-1"></i>{{ laptop.gaming_capability }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    <!-- Key Features (fallback) -->
+                                    {% if not laptop.ram_gb and not laptop.storage_gb and not laptop.screen_size_inches %}
+                                        {% set features = laptop.features if laptop.features else '' %}
+                                        {% if features and features != '' %}
+                                            {% set features_text = features %}
+                                            {% if features_text|length > 100 %}
+                                                {% set features_text = features_text[:100] + '...' %}
+                                            {% endif %}
+                                            <div class="features-text">{{ features_text }}</div>
+                                        {% else %}
+                                            <span class="text-muted">No features available</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <!-- Media Indicators -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    {% if laptop.videos and laptop.videos|length > 0 %}
+                                        <span class="badge bg-success me-1">
+                                            <i class="fas fa-video me-1"></i>{{ laptop.videos|length }} Video{{ 's' if laptop.videos|length != 1 else '' }}
+                                        </span>
+                                    {% endif %}
+                                    {% if laptop.images and laptop.images|length > 0 %}
+                                        <span class="badge bg-info me-1">
+                                            <i class="fas fa-image me-1"></i>{{ laptop.images|length }} Image{{ 's' if laptop.images|length != 1 else '' }}
+                                        </span>
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <!-- Similarity Score -->
+                            {% if laptop.similarity_score %}
+                            <div class="mb-3">
+                                {% set score_percent = (laptop.similarity_score * 100)|round(1) %}
+                                {% set bar_color = 'bg-danger' if score_percent >= 80 else 'bg-warning' if score_percent >= 60 else 'bg-info' if score_percent >= 40 else 'bg-secondary' %}
+                                {% set score_label = 'Excellent Match' if score_percent >= 80 else 'Good Match' if score_percent >= 60 else 'Moderate Match' if score_percent >= 40 else 'Fair Match' %}
+                                
+                                <div class="progress" style="height: 8px;">
+                                    <!-- stylelint-disable-next-line -->
+                                    <div class="progress-bar {{ bar_color }}" 
+                                         style="width: {{ score_percent }}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    <strong>{{ score_label }}:</strong> {{ score_percent }}% match
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="card-footer bg-transparent">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <a href="{{ url_for('laptop_detail', laptop_id=laptop.laptop_id) }}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-info-circle me-1"></i>Details
+                                </a>
+                                <button class="btn btn-outline-secondary btn-sm compare-btn" 
+                                        data-asin="{{ laptop.asin }}"
+                                        data-title="{{ laptop.title_y }}"
+                                        data-brand="{{ laptop.brand }}"
+                                        data-price="{{ laptop.price_myr }}"
+                                        data-rating="{{ laptop.average_rating }}"
+                                        data-ram="{{ laptop.ram_gb }}GB"
+                                        data-storage="{{ laptop.storage_gb }}GB"
+                                        data-processor="{{ laptop.processor_model }}"
+                                        data-gpu="{{ laptop.gpu_model }}"
+                                        data-screen="{{ laptop.screen_size_inches }}"
+                                        data-storage-type="{{ laptop.storage_type }}"
+                                        data-os="{{ laptop.os }}"
+                                        data-ram-type="{{ laptop.ram_type }}"
+                                        data-cpu-benchmark="{{ laptop.cpu_benchmark_score }}"
+                                        data-gpu-benchmark="{{ laptop.gpu_benchmark_score }}"
+                                        data-performance-tier="{{ laptop.performance_tier }}"
+                                        data-gaming-capability="{{ laptop.gaming_capability }}">
+                                    <i class="fas fa-plus me-1"></i>Compare
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <!-- No Results Message -->
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-search" style="font-size: 4rem; color: #6c757d; margin-bottom: 20px;"></i>
+            <h3>No Recommendations Found</h3>
+            <p class="text-muted">
+                We couldn't find laptops matching your current preferences. 
+                Try adjusting your budget range or relaxing some requirements.
+            </p>
+            <a href="{{ url_for('recommend') }}" class="btn btn-primary">
+                <i class="fas fa-edit me-2"></i>Modify Preferences
+            </a>
+        </div>
+    {% endif %}
+
+    <!-- Alternative Actions -->
+    <div class="row mt-5">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-compass feature-icon"></i>
+                    <h5>Explore More</h5>
+                    <p class="text-muted">Browse through our complete laptop collection</p>
+                    <a href="{{ url_for('explore') }}" class="btn btn-outline-primary">Explore</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-search feature-icon"></i>
+                    <h5>Search Specific</h5>
+                    <p class="text-muted">Search for specific brands or features</p>
+                    <a href="{{ url_for('search') }}" class="btn btn-outline-primary">Search</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <i class="fas fa-chart-bar feature-icon"></i>
+                    <h5>View Analytics</h5>
+                    <p class="text-muted">See market trends and insights</p>
+                    <a href="{{ url_for('analytics') }}" class="btn btn-outline-primary">Analytics</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize any page-specific functionality
+    console.log('Recommendations page loaded');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Laptop Recommender System{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: var(--primary-color) !important;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 80px 0;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: 500;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .feature-icon {
+            font-size: 3rem;
+            color: var(--secondary-color);
+            margin-bottom: 20px;
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .laptop-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .laptop-card .card-body {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .laptop-card .card-footer {
+            margin-top: auto;
+        }
+        
+        .rating-stars {
+            color: var(--warning-color);
+        }
+        
+        .price-tag {
+            background-color: var(--success-color);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        
+        .footer {
+            background-color: var(--dark-bg);
+            color: white;
+            padding: 40px 0;
+            margin-top: 60px;
+        }
+        
+        .footer .text-muted {
+            color: #b8c2cc !important;  /* Lighter color for better contrast */
+        }
+        
+        .footer a {
+            color: #b8c2cc !important;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            color: white !important;
+            text-decoration: underline;
+        }
+        
+        .features-text {
+            line-height: 1.4;
+            color: #6c757d;
+            font-size: 0.875rem;
+            word-wrap: break-word;
+        }
+        
+        /* Consistent Product Card Image Styling */
+        .laptop-card .card-img-top {
+            height: 200px !important;
+            width: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        .laptop-card .card-img-top-placeholder {
+            height: 200px !important;
+            width: 100%;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+        }
+        
+        /* Detail page main image */
+        .detail-main-image {
+            max-height: 300px !important;
+            width: 100%;
+            object-fit: contain;
+            object-position: center;
+        }
+        
+        /* Detail page similar laptops */
+        .similar-laptop-card .card-img-top {
+            height: 150px !important;
+            width: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+        
+        .similar-laptop-card .card-img-top-placeholder {
+            height: 150px !important;
+            width: 100%;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+        }
+        
+        /* Thumbnail images in detail page */
+        .thumbnail-image {
+            height: 60px !important;
+            width: 60px !important;
+            object-fit: cover;
+            object-position: center;
+            border-radius: 4px;
+        }
+        
+        /* Ensure consistent image container sizing */
+        .image-thumbnails .col-auto {
+            width: 60px;
+            height: 60px;
+            margin: 2px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner-border {
+            color: var(--secondary-color);
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+        
+        /* Enhanced Specifications Styling */
+        .specs-summary .badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .performance-summary .badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+        }
+        
+        .specs-summary, .performance-summary {
+            line-height: 1.8;
+        }
+        
+        /* Specification card styling */
+        .card-body h6 {
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-body .text-muted {
+            font-size: 0.9rem;
+        }
+        
+        /* Badge styling for performance indicators */
+        .badge.bg-danger {
+            background-color: #dc3545 !important;
+        }
+        
+        .badge.bg-success {
+            background-color: #28a745 !important;
+        }
+        
+        .badge.bg-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+        
+        .badge.bg-info {
+            background-color: #17a2b8 !important;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-laptop me-2"></i>
+                Laptop Recommender
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home me-1"></i>Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('recommend') }}">
+                            <i class="fas fa-search me-1"></i>Get Recommendations
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('explore') }}">
+                            <i class="fas fa-compass me-1"></i>Explore
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('search') }}">
+                            <i class="fas fa-search me-1"></i>Search
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('analytics') }}">
+                            <i class="fas fa-chart-bar me-1"></i>Analytics
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link btn btn-link" onclick="openCompareModal()" style="border: none; background: none;">
+                            <i class="fas fa-balance-scale me-1"></i>Compare
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-laptop me-2"></i>Laptop Recommender System</h5>
+                    <p class="text-muted">Powered by SAUE (System Active, User Engage) approach</p>
+                    <p class="text-muted">Providing intelligent laptop recommendations based on your preferences.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h6>Quick Links</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="{{ url_for('index') }}" class="text-muted">Home</a></li>
+                        <li><a href="{{ url_for('recommend') }}" class="text-muted">Get Recommendations</a></li>
+                        <li><a href="{{ url_for('explore') }}" class="text-muted">Explore Laptops</a></li>
+                        <li><a href="{{ url_for('analytics') }}" class="text-muted">Analytics</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="text-center">
+                <p class="text-muted mb-0">&copy; 2025 Laptop Recommender System. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Comparison Modal -->
+    <div class="modal fade" id="compareModal" tabindex="-1" aria-labelledby="compareModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="compareModalLabel">
+                        <i class="fas fa-balance-scale me-2"></i>Compare Laptops
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="compareContainer">
+                        <p class="text-muted text-center">No laptops selected for comparison. Click "Compare" on laptop cards to add them.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="clearComparison()">Clear All</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        // Global functions
+        function showLoading() {
+            $('.loading').show();
+        }
+        
+        function hideLoading() {
+            $('.loading').hide();
+        }
+        
+        function formatPrice(price) {
+            return 'RM ' + parseFloat(price).toLocaleString('en-MY', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+        
+        function formatRating(rating) {
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 >= 0.5;
+            let stars = '';
+            
+            for (let i = 0; i < fullStars; i++) {
+                stars += '<i class="fas fa-star text-warning"></i>';
+            }
+            
+            if (hasHalfStar) {
+                stars += '<i class="fas fa-star-half-alt text-warning"></i>';
+            }
+            
+            const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+            for (let i = 0; i < emptyStars; i++) {
+                stars += '<i class="far fa-star text-warning"></i>';
+            }
+            
+            return stars + ' <span class="ms-2">(' + rating.toFixed(1) + ')</span>';
+        }
+        
+        // Global variables for comparison
+        let compareList = [];
+        
+        // Comparison functions
+        function openCompareModal() {
+            $('#compareModal').modal('show');
+        }
+        
+        function addToCompare(laptopId, title, brand, price, rating, ram, storage, processor, gpu, screenSize, storageType, os, ramType, cpuBenchmark, gpuBenchmark, performanceTier, gamingCapability) {
+            const laptop = {
+                id: laptopId,
+                title: title || 'Unknown Title',
+                brand: brand || 'Unknown Brand',
+                price: price || '0.00',
+                rating: rating || '0.0',
+                ram: ram || 'Unknown',
+                storage: storage || 'Unknown',
+                processor: processor || 'Unknown',
+                gpu: gpu || 'Unknown',
+                screenSize: screenSize || 'Unknown',
+                storageType: storageType || 'Unknown',
+                os: os || 'Unknown',
+                ramType: ramType || 'Unknown',
+                cpuBenchmark: cpuBenchmark || 0,
+                gpuBenchmark: gpuBenchmark || 0,
+                performanceTier: performanceTier || 'Unknown',
+                gamingCapability: gamingCapability || 'Unknown'
+            };
+            
+            if (!compareList.find(item => item.id === laptopId)) {
+                compareList.push(laptop);
+                updateCompareModal();
+                showNotification('Laptop added to comparison!', 'success');
+            } else {
+                showNotification('Laptop already in comparison!', 'info');
+            }
+        }
+        
+        function removeFromCompare(laptopId) {
+            compareList = compareList.filter(item => item.id !== laptopId);
+            updateCompareModal();
+            showNotification('Laptop removed from comparison!', 'info');
+        }
+        
+        function clearComparison() {
+            compareList = [];
+            updateCompareModal();
+            showNotification('Comparison cleared!', 'info');
+        }
+        
+        function updateCompareModal() {
+            const container = $('#compareContainer');
+            
+            if (compareList.length === 0) {
+                container.html('<p class="text-muted text-center">No laptops selected for comparison. Click "Compare" on laptop cards to add them.</p>');
+                return;
+            }
+            
+            let html = '<div class="table-responsive"><table class="table table-bordered table-striped">';
+            html += '<thead class="table-dark"><tr><th style="min-width: 150px;">Specification</th>';
+            
+            compareList.forEach(laptop => {
+                // Truncate long titles for better display
+                const shortTitle = laptop.title.length > 50 ? laptop.title.substring(0, 50) + '...' : laptop.title;
+                html += `<th style="min-width: 200px;">${shortTitle}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            // Brand
+            html += '<tr><td><strong><i class="fas fa-tag me-2"></i>Brand</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.brand}</td>`;
+            });
+            html += '</tr>';
+            
+            // Price
+            html += '<tr><td><strong><i class="fas fa-dollar-sign me-2"></i>Price</strong></td>';
+            compareList.forEach(laptop => {
+                const formattedPrice = parseFloat(laptop.price).toFixed(2);
+                html += `<td>RM ${formattedPrice}</td>`;
+            });
+            html += '</tr>';
+            
+            // Price Category
+            html += '<tr><td><strong><i class="fas fa-tags me-2"></i>Price Category</strong></td>';
+            compareList.forEach(laptop => {
+                const price = parseFloat(laptop.price);
+                let category = 'Budget';
+                if (price >= 5000) category = 'Premium';
+                else if (price >= 3000) category = 'Mid-range';
+                else if (price >= 1500) category = 'Entry-level';
+                html += `<td><span class="badge bg-info">${category}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Rating
+            html += '<tr><td><strong><i class="fas fa-star me-2"></i>Rating</strong></td>';
+            compareList.forEach(laptop => {
+                const rating = parseFloat(laptop.rating);
+                const stars = '★'.repeat(Math.floor(rating)) + '☆'.repeat(5 - Math.floor(rating));
+                html += `<td>${stars} (${rating.toFixed(1)})</td>`;
+            });
+            html += '</tr>';
+            
+            // RAM
+            html += '<tr><td><strong><i class="fas fa-memory me-2"></i>RAM</strong></td>';
+            compareList.forEach(laptop => {
+                const ramDisplay = laptop.ramType !== 'Unknown' ? `${laptop.ram} (${laptop.ramType})` : laptop.ram;
+                html += `<td>${ramDisplay}</td>`;
+            });
+            html += '</tr>';
+            
+            // Storage
+            html += '<tr><td><strong><i class="fas fa-hdd me-2"></i>Storage</strong></td>';
+            compareList.forEach(laptop => {
+                const storageDisplay = laptop.storageType !== 'Unknown' ? `${laptop.storage} (${laptop.storageType})` : laptop.storage;
+                html += `<td>${storageDisplay}</td>`;
+            });
+            html += '</tr>';
+            
+            // Screen Size
+            html += '<tr><td><strong><i class="fas fa-desktop me-2"></i>Screen Size</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.screenSize}"</td>`;
+            });
+            html += '</tr>';
+            
+            // Operating System
+            html += '<tr><td><strong><i class="fas fa-laptop me-2"></i>Operating System</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.os || 'Unknown'}</td>`;
+            });
+            html += '</tr>';
+            
+            // Processor
+            html += '<tr><td><strong><i class="fas fa-microchip me-2"></i>Processor</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.processor}</td>`;
+            });
+            html += '</tr>';
+            
+            // CPU Performance
+            html += '<tr><td><strong><i class="fas fa-tachometer-alt me-2"></i>CPU Performance</strong></td>';
+            compareList.forEach(laptop => {
+                const cpuScore = laptop.cpuBenchmark || 0;
+                let badgeClass = 'bg-info';
+                let label = 'Standard';
+                if (cpuScore >= 15000) { badgeClass = 'bg-success'; label = 'High Performance'; }
+                else if (cpuScore >= 10000) { badgeClass = 'bg-warning'; label = 'Good Performance'; }
+                html += `<td>${cpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Graphics
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>Graphics</strong></td>';
+            compareList.forEach(laptop => {
+                html += `<td>${laptop.gpu}</td>`;
+            });
+            html += '</tr>';
+            
+            // GPU Performance
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>GPU Performance</strong></td>';
+            compareList.forEach(laptop => {
+                const gpuScore = laptop.gpuBenchmark || 0;
+                let badgeClass = 'bg-info';
+                let label = 'Basic Graphics';
+                if (gpuScore >= 8000) { badgeClass = 'bg-success'; label = 'Gaming Ready'; }
+                else if (gpuScore >= 5000) { badgeClass = 'bg-warning'; label = 'Light Gaming'; }
+                html += `<td>${gpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Performance Tier
+            html += '<tr><td><strong><i class="fas fa-star me-2"></i>Performance Tier</strong></td>';
+            compareList.forEach(laptop => {
+                const tier = laptop.performanceTier || 'Unknown';
+                let badgeClass = 'bg-info';
+                if (tier === 'Ultra High') badgeClass = 'bg-danger';
+                else if (tier === 'High') badgeClass = 'bg-success';
+                else if (tier === 'Medium-High') badgeClass = 'bg-warning';
+                html += `<td><span class="badge ${badgeClass}">${tier}</span></td>`;
+            });
+            html += '</tr>';
+            
+            // Gaming Capability
+            html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>Gaming Capability</strong></td>';
+            compareList.forEach(laptop => {
+                const gaming = laptop.gamingCapability || 'Unknown';
+                let badgeClass = 'bg-secondary';
+                if (gaming === 'High-End Gaming') badgeClass = 'bg-danger';
+                else if (gaming === 'Mid-Range Gaming') badgeClass = 'bg-warning';
+                else if (gaming === 'Casual Gaming') badgeClass = 'bg-info';
+                html += `<td><span class="badge ${badgeClass}">${gaming}</span></td>`;
+            });
+            html += '</tr>';
+            
+            html += '</tbody></table></div>';
+            
+            // Add remove buttons
+            html += '<div class="text-center mt-3">';
+            compareList.forEach(laptop => {
+                html += `<button class="btn btn-outline-danger btn-sm me-2" onclick="removeFromCompare('${laptop.id}')">
+                    <i class="fas fa-times me-1"></i>Remove ${laptop.brand}
+                </button>`;
+            });
+            html += '</div>';
+            
+            container.html(html);
+        }
+        
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' : type === 'error' ? 'alert-danger' : 'alert-info';
+            const alert = $(`<div class="alert ${alertClass} alert-dismissible fade show position-fixed" style="top: 20px; right: 20px; z-index: 9999;">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`);
+            
+            $('body').append(alert);
+            
+            setTimeout(() => {
+                alert.fadeOut(() => alert.remove());
+            }, 3000);
+        }
+        
+        // Auto-hide alerts after 5 seconds
+        $(document).ready(function() {
+            setTimeout(function() {
+                $('.alert').fadeOut('slow');
+            }, 5000);
+            
+            // Handle compare button clicks using data attributes
+            $(document).on('click', '.compare-btn', function() {
+                const $btn = $(this);
+                const laptopData = {
+                    id: $btn.data('asin'),
+                    title: $btn.data('title') || 'Unknown Title',
+                    brand: $btn.data('brand') || 'Unknown Brand',
+                    price: $btn.data('price') || '0.00',
+                    rating: $btn.data('rating') || '0.0',
+                    ram: $btn.data('ram') || 'Unknown',
+                    storage: $btn.data('storage') || 'Unknown',
+                    processor: $btn.data('processor') || 'Unknown',
+                    gpu: $btn.data('gpu') || 'Unknown',
+                    screenSize: $btn.data('screen') || 'Unknown',
+                    storageType: $btn.data('storage-type') || 'Unknown',
+                    os: $btn.data('os') || 'Unknown',
+                    ramType: $btn.data('ram-type') || 'Unknown',
+                    cpuBenchmark: $btn.data('cpu-benchmark') || 0,
+                    gpuBenchmark: $btn.data('gpu-benchmark') || 0,
+                    performanceTier: $btn.data('performance-tier') || 'Unknown',
+                    gamingCapability: $btn.data('gaming-capability') || 'Unknown'
+                };
+                
+                addToCompare(
+                    laptopData.id,
+                    laptopData.title,
+                    laptopData.brand,
+                    laptopData.price,
+                    laptopData.rating,
+                    laptopData.ram,
+                    laptopData.storage,
+                    laptopData.processor,
+                    laptopData.gpu,
+                    laptopData.screenSize,
+                    laptopData.storageType,
+                    laptopData.os,
+                    laptopData.ramType,
+                    laptopData.cpuBenchmark,
+                    laptopData.gpuBenchmark,
+                    laptopData.performanceTier,
+                    laptopData.gamingCapability
+                );
+            });
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
