@@ -5,7 +5,6 @@ Handles data loading, cleaning, and processing for Amazon laptop reviews enriche
 
 import pandas as pd
 import numpy as np
-import requests
 from typing import Optional, Dict, Any, List, Tuple
 import logging
 from datetime import datetime
@@ -716,33 +715,17 @@ class LaptopDataPreprocessor:
                 include_lowest=True
             )
         
-        # 3. Extract specifications from details
-        if 'details_parsed' in df_enhanced.columns:
-            # Extract common specs
-            df_enhanced['ram_gb'] = df_enhanced['details_parsed'].apply(
-                lambda x: self._extract_spec(x, 'RAM', 'GB') if isinstance(x, dict) else None
-            )
-            df_enhanced['storage_gb'] = df_enhanced['details_parsed'].apply(
-                lambda x: self._extract_storage(x) if isinstance(x, dict) else None
-            )
-            df_enhanced['screen_size'] = df_enhanced['details_parsed'].apply(
-                lambda x: self._extract_spec(x, 'Screen Size', 'Inches') if isinstance(x, dict) else None
-            )
-            df_enhanced['processor'] = df_enhanced['details_parsed'].apply(
-                lambda x: self._extract_processor(x) if isinstance(x, dict) else None
-            )
-        
-        # 4. Create text length features
+        # 3. Create text length features
         df_enhanced['review_length'] = df_enhanced['text'].str.len()
         df_enhanced['title_length'] = df_enhanced['title_x'].str.len()
         
-        # 5. Create helpfulness ratio
+        # 4. Create helpfulness ratio
         if 'helpful_vote' in df_enhanced.columns and 'num_reviews' in df_enhanced.columns:
             df_enhanced['helpfulness_ratio'] = (
                 df_enhanced['helpful_vote'] / df_enhanced['num_reviews'].replace(0, 1)
             ).fillna(0)
         
-        # 6. Create brand popularity
+        # 5. Create brand popularity
         if 'brand' in df_enhanced.columns:
             brand_counts = df_enhanced['brand'].value_counts()
             df_enhanced['brand_popularity'] = df_enhanced['brand'].map(brand_counts)
@@ -750,178 +733,320 @@ class LaptopDataPreprocessor:
         logger.info("Derived features added successfully")
         return df_enhanced
     
-    def _extract_spec(self, details: Dict, key: str, unit: str) -> Optional[float]:
+    
+    def _extract_screen_size_from_text(self, text: str) -> Optional[float]:
         """
-        Extract specification value from details dictionary.
+        Extract screen size from text using comprehensive regex patterns.
+        This method searches for screen size information in laptop titles and descriptions.
         
         Args:
-            details (Dict): Details dictionary
-            key (str): Key to search for
-            unit (str): Unit to extract
+            text (str): Text containing screen size information
             
         Returns:
-            Optional[float]: Extracted value
+            Optional[float]: Screen size in inches, None if not found
         """
-        if not isinstance(details, dict):
+        if not text or pd.isna(text):
             return None
         
-        for k, v in details.items():
-            if key.lower() in k.lower() and str(v):
-                # Extract numeric value
-                match = re.search(rf'(\d+(?:\.\d+)?)\s*{unit}', str(v), re.IGNORECASE)
-                if match:
-                    return float(match.group(1))
+        text_str = str(text).lower()
+        
+        # Comprehensive screen size patterns to catch various formats
+        screen_patterns = [
+            # Standard formats with hyphen (e.g., "13-inch", "14-inch")
+            r'(\d+(?:\.\d+)?)-inch',  # 13-inch, 14-inch, 15.6-inch
+            r'(\d+(?:\.\d+)?)\s*inch',  # 15.6 inch
+            r'(\d+(?:\.\d+)?)\s*"',  # 15.6"
+            r'(\d+(?:\.\d+)?)\s*in',  # 15.6 in
+            r'(\d+(?:\.\d+)?)\s*inches',  # 15.6 inches
+            
+            # Formats with display type (e.g., "15.6 Full HD", "15.6 144hz")
+            r'(\d+(?:\.\d+)?)\s+(?:full\s+hd|fhd|qhd|uhd|4k|144hz|120hz|60hz|ips|oled|led)',  # 15.6 Full HD
+            r'(\d+(?:\.\d+)?)\s+(?:display|screen|monitor)',  # 15.6 Display
+            
+            # Formats with resolution (e.g., "15.6 1920x1080")
+            r'(\d+(?:\.\d+)?)\s+\d+x\d+',  # 15.6 1920x1080
+            
+            # Formats with refresh rate (e.g., "15.6 144Hz")
+            r'(\d+(?:\.\d+)?)\s+\d+hz',  # 15.6 144Hz
+            
+            # Formats with panel type (e.g., "15.6 IPS", "15.6 OLED")
+            r'(\d+(?:\.\d+)?)\s+(?:ips|oled|led|tn|va)',  # 15.6 IPS
+            
+            # Edge case: just the number followed by space and any word (common in titles)
+            r'(\d+(?:\.\d+)?)\s+\w+',  # 15.6 Gaming, 15.6 Touch, etc.
+        ]
+        
+        # Try each pattern and return the first match
+        for pattern in screen_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                screen_size = float(matches[0])
+                # Validate that it's a reasonable screen size (between 10 and 20 inches)
+                if 10.0 <= screen_size <= 20.0:
+                    return screen_size
+        
         return None
     
-    def _extract_storage(self, details: Dict) -> Optional[float]:
+    def _extract_ram_from_text(self, text: str) -> Optional[float]:
         """
-        Extract storage capacity from details.
+        Extract RAM capacity from text using regex patterns.
         
         Args:
-            details (Dict): Details dictionary
+            text (str): Text containing RAM information
             
         Returns:
-            Optional[float]: Storage capacity in GB
+            Optional[float]: RAM capacity in GB, None if not found
         """
-        if not isinstance(details, dict):
+        if not text or pd.isna(text):
             return None
         
-        for k, v in details.items():
-            if any(term in k.lower() for term in ['hard drive', 'ssd', 'storage', 'flash memory']):
-                if str(v):
-                    # Extract numeric value
-                    match = re.search(r'(\d+(?:\.\d+)?)\s*(?:GB|TB)', str(v), re.IGNORECASE)
-                    if match:
-                        value = float(match.group(1))
-                        # Convert TB to GB
-                        if 'TB' in str(v).upper():
-                            value *= 1024
-                        return value
+        text_str = str(text).lower()
+        
+        # RAM patterns with various formats
+        ram_patterns = [
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*|ram|memory)',  # 8GB DDR4, 16GB RAM
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*)',  # 8GB DDR4
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ram)',  # 8GB RAM
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:memory)',  # 8GB Memory
+            r'(\d+(?:\.\d+)?)\s*gb',  # 8GB (fallback)
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ddr\d*|ram|memory)',  # 1TB DDR4
+            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback)
+        ]
+        
+        for pattern in ram_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                value = float(matches[0])
+                # Convert TB to GB
+                if 'tb' in text_str and 'gb' not in text_str:
+                    value *= 1024
+                return value
+        
         return None
     
-    def _extract_processor(self, details: Dict) -> Optional[str]:
+    def _extract_storage_from_text(self, text: str) -> Optional[float]:
         """
-        Extract processor information from details.
+        Extract storage capacity from text using regex patterns.
         
         Args:
-            details (Dict): Details dictionary
+            text (str): Text containing storage information
             
         Returns:
-            Optional[str]: Processor information
+            Optional[float]: Storage capacity in GB, None if not found
         """
-        if not isinstance(details, dict):
+        if not text or pd.isna(text):
             return None
         
-        for k, v in details.items():
-            if 'processor' in k.lower() and str(v):
-                return str(v)
+        text_str = str(text).lower()
+        
+        # Storage patterns with various formats - prioritize storage-specific terms
+        storage_patterns = [
+            # High priority: explicit storage terms with capacity
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 1TB SSD, 2TB NVMe
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|nvme|pcie)',  # 1TB SSD, 2TB NVMe
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 512GB SSD, 1TB HDD
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|nvme|pcie)',  # 512GB SSD
+            
+            # Medium priority: storage with less specific terms
+            r'(\d+(?:\.\d+)?)\s*tb\s*(?:hard\s*drive|storage)',  # 1TB hard drive
+            r'(\d+(?:\.\d+)?)\s*gb\s*(?:hard\s*drive|storage)',  # 512GB hard drive
+            
+            # Lower priority: just numbers with storage context
+            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback, but check context)
+            r'(\d+(?:\.\d+)?)\s*gb',  # 512GB (fallback, but check context)
+        ]
+        
+        # First try high-priority patterns
+        for i, pattern in enumerate(storage_patterns):
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                value = float(matches[0])
+                
+                # Check if this pattern matched TB or GB
+                # Look for the pattern in the original text to see the unit
+                pattern_match = re.search(pattern, text_str, re.IGNORECASE)
+                if pattern_match:
+                    matched_text = pattern_match.group(0).lower()
+                    # If the pattern contains TB, convert to GB
+                    if 'tb' in matched_text and 'gb' not in matched_text[:matched_text.find('tb')]:
+                        value *= 1024
+                
+                # For lower priority patterns, verify it's actually storage
+                if i >= 6:  # Lower priority patterns
+                    # Check if this might be RAM instead of storage
+                    if any(ram_term in text_str for ram_term in ['ram', 'memory', 'ddr']):
+                        continue  # Skip this match, it's likely RAM
+                
+                return value
+        
         return None
     
-    def preprocess_pipeline(self) -> pd.DataFrame:
+    def _extract_processor_name_from_text(self, text: str) -> Optional[str]:
         """
-        Run the complete preprocessing pipeline.
-        
-        Returns:
-            pd.DataFrame: Fully processed dataset
-        """
-        logger.info("Starting complete preprocessing pipeline...")
-        
-        # Step 1: Load data
-        self.load_data()
-        
-        # Step 2: Clean data
-        cleaned_data = self.clean_data()
-        
-        # Step 3: Add derived features
-        processed_data = self.add_derived_features(cleaned_data)
-        
-        # Step 4: Save processed data
-        self.save_processed_data(processed_data)
-        
-        self.processed_df = processed_data
-        logger.info("Preprocessing pipeline completed successfully")
-        
-        return processed_data
-    
-    def save_processed_data(self, df: pd.DataFrame, filepath: str = "data/processed_laptop_data.csv"):
-        """
-        Save the processed dataset to CSV file.
+        Extract processor model from text using regex patterns.
         
         Args:
-            df (pd.DataFrame): Processed dataset
-            filepath (str): Output file path
-        """
-        # Create data directory if it doesn't exist
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
-        # Save to CSV
-        df.to_csv(filepath, index=False)
-        logger.info(f"Processed data saved to {filepath}")
-    
-    def get_data_summary(self) -> Dict:
-        """
-        Get a comprehensive summary of the processed dataset.
-        
+            text (str): Text containing processor information
+            
         Returns:
-            Dict: Dataset summary
+            Optional[str]: Processor model, None if not found
         """
-        if self.processed_df is None:
-            raise ValueError("No processed data available. Run preprocess_pipeline() first.")
+        if not text or pd.isna(text):
+            return None
         
-        df = self.processed_df
+        text_str = str(text).lower()
         
-        summary = {
-            'total_records': len(df),
-            'total_features': len(df.columns),
-            'price_range': {
-                'min': df['price_numeric'].min() if 'price_numeric' in df.columns else None,
-                'max': df['price_numeric'].max() if 'price_numeric' in df.columns else None,
-                'mean': df['price_numeric'].mean() if 'price_numeric' in df.columns else None
-            },
-            'brands_count': df['brand'].nunique() if 'brand' in df.columns else 0,
-            'rating_stats': {
-                'mean': df['rating'].mean() if 'rating' in df.columns else None,
-                'median': df['rating'].median() if 'rating' in df.columns else None
-            },
-            'text_stats': {
-                'avg_review_length': df['review_length'].mean() if 'review_length' in df.columns else None,
-                'total_reviews': len(df[df['text'].str.len() > 10]) if 'text' in df.columns else 0
-            }
-        }
+        # Processor patterns - comprehensive patterns to capture complete processor names
+        processor_patterns = [
+            # Intel Core i series - various formats
+            r'(intel\s+core\s+i[3579]-\d+[a-z]*\d*)',  # Intel Core i7-5950HQ, i5-1135G7
+            r'(intel\s+core\s+i[3579]\s+\d+[a-z]*\d*)',  # Intel Core i7 5950HQ
+            r'(core\s+i[3579]-\d+[a-z]*\d*)',  # Core i7-5950HQ
+            r'(i[3579]-\d+[a-z]*\d*)',  # i7-5950HQ
+            
+            # Intel Pentium and Celeron
+            r'(intel\s+pentium\s+\w+)',  # Intel Pentium Gold
+            r'(intel\s+celeron\s+\w+)',  # Intel Celeron N4020
+            r'(pentium\s+\w+)',  # Pentium Gold
+            r'(celeron\s+\w+)',  # Celeron N4020
+            
+            # AMD Ryzen series
+            r'(amd\s+ryzen\s+[3579]\s+\d+[a-z]*\d*)',  # AMD Ryzen 5 5500U
+            r'(ryzen\s+[3579]\s+\d+[a-z]*\d*)',  # Ryzen 5 5500U
+            r'(amd\s+ryzen\s+\d+[a-z]*\d*)',  # AMD Ryzen 5500U
+            r'(ryzen\s+\d+[a-z]*\d*)',  # Ryzen 5500U
+            
+            # AMD Athlon and other AMD processors
+            r'(amd\s+athlon\s+\w+)',  # AMD Athlon Silver
+            r'(athlon\s+\w+)',  # Athlon Silver
+            
+            # Apple processors
+            r'(apple\s+m\d+)',  # Apple M1, Apple M2
+            r'(m\d+)',  # M1, M2
+            
+            # Generic patterns
+            r'(intel\s+\w+)',  # Intel something
+            r'(amd\s+\w+)',  # AMD something
+        ]
         
-        return summary
+        for pattern in processor_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                # Return the first match, cleaned up
+                processor = matches[0].strip()
+                return processor.title()  # Capitalize properly
+        
+        return None
     
-    def export_feature_columns(self) -> Dict[str, List[str]]:
+    def _extract_gpu_name_from_text(self, text: str) -> Optional[str]:
         """
-        Export feature columns organized by category.
+        Extract GPU model from text using regex patterns.
         
+        Args:
+            text (str): Text containing GPU information
+            
         Returns:
-            Dict[str, List[str]]: Feature columns by category
+            Optional[str]: GPU model, None if not found
         """
-        if self.processed_df is None:
-            raise ValueError("No processed data available. Run preprocess_pipeline() first.")
+        if not text or pd.isna(text):
+            return None
         
-        df = self.processed_df
+        text_str = str(text).lower()
         
-        feature_categories = {
-            'Basic Info': ['asin', 'parent_asin', 'user_id', 'timestamp'],
-            'Product Details': ['title_x', 'title_y', 'brand', 'os', 'color', 'store'],
-            'Reviews & Ratings': ['rating', 'text', 'helpful_vote', 'verified_purchase', 'average_rating', 'rating_number'],
-            'Pricing': ['price', 'price_numeric', 'price_category'],
-            'Specifications': ['ram_gb', 'storage_gb', 'screen_size', 'processor'],
-            'Analytics': ['num_reviews', 'avg_helpful_votes', 'helpfulness_ratio', 'brand_popularity'],
-            'Content': ['features_clean', 'details_parsed'],
-            'Derived': ['review_length', 'title_length', 'rating_category']
-        }
+        # GPU patterns - comprehensive patterns to capture GPU names
+        gpu_patterns = [
+            # NVIDIA RTX series
+            r'(nvidia\s+geforce\s+rtx\s+\d+\s*(?:ti|super)?)',  # NVIDIA GeForce RTX 3060 Ti
+            r'(geforce\s+rtx\s+\d+\s*(?:ti|super)?)',  # GeForce RTX 3060 Ti
+            r'(rtx\s+\d+\s*(?:ti|super)?)',  # RTX 3060 Ti
+            
+            # NVIDIA GTX series
+            r'(nvidia\s+geforce\s+gtx\s+\d+\s*(?:ti|super)?)',  # NVIDIA GeForce GTX 1660 Ti
+            r'(geforce\s+gtx\s+\d+\s*(?:ti|super)?)',  # GeForce GTX 1660 Ti
+            r'(gtx\s+\d+\s*(?:ti|super)?)',  # GTX 1660 Ti
+            
+            # AMD Radeon series
+            r'(amd\s+radeon\s+rx\s+\d+\s*(?:xt|xtx)?)',  # AMD Radeon RX 6600 XT
+            r'(radeon\s+rx\s+\d+\s*(?:xt|xtx)?)',  # Radeon RX 6600 XT
+            r'(rx\s+\d+\s*(?:xt|xtx)?)',  # RX 6600 XT
+            
+            # Intel Arc series
+            r'(intel\s+arc\s+a\d+)',  # Intel Arc A770
+            r'(arc\s+a\d+)',  # Arc A770
+            
+            # Integrated graphics
+            r'(intel\s+iris\s+xe)',  # Intel Iris Xe
+            r'(iris\s+xe)',  # Iris Xe
+            r'(intel\s+uhd\s+graphics)',  # Intel UHD Graphics
+            r'(uhd\s+graphics)',  # UHD Graphics
+            r'(amd\s+radeon\s+graphics)',  # AMD Radeon Graphics
+            r'(radeon\s+graphics)',  # Radeon Graphics
+            
+            # Generic patterns
+            r'(nvidia\s+\w+)',  # NVIDIA something
+            r'(amd\s+\w+)',  # AMD something
+            r'(intel\s+\w+)',  # Intel something
+        ]
         
-        # Filter to only include columns that exist in the dataset
-        available_features = {}
-        for category, columns in feature_categories.items():
-            available_cols = [col for col in columns if col in df.columns]
-            if available_cols:
-                available_features[category] = available_cols
+        for pattern in gpu_patterns:
+            matches = re.findall(pattern, text_str, re.IGNORECASE)
+            if matches:
+                # Return the first match, cleaned up
+                gpu = matches[0].strip()
+                return gpu.title()  # Capitalize properly
         
-        return available_features
+        return None
+    
+    def _extract_storage_type_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract storage type from text using regex patterns.
+        
+        Args:
+            text (str): Text containing storage type information
+            
+        Returns:
+            Optional[str]: Storage type, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # Storage type patterns
+        storage_types = ['nvme', 'ssd', 'hdd', 'pcie', 'emmc']
+        
+        for storage_type in storage_types:
+            if storage_type in text_str:
+                return storage_type.upper()
+        
+        return None
+    
+    def _extract_ram_type_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract RAM type from text using regex patterns.
+        
+        Args:
+            text (str): Text containing RAM type information
+            
+        Returns:
+            Optional[str]: RAM type, None if not found
+        """
+        if not text or pd.isna(text):
+            return None
+        
+        text_str = str(text).lower()
+        
+        # RAM type patterns
+        ram_types = ['ddr5', 'ddr4', 'ddr3', 'lpddr5', 'lpddr4', 'lpddr3']
+        
+        for ram_type in ram_types:
+            if ram_type in text_str:
+                return ram_type.upper()
+        
+        return None
+    
+    
+    
 
     def save_cached_data(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
                         cache_dir: str = "data/cache") -> None:
@@ -1090,12 +1215,22 @@ class LaptopDataPreprocessor:
             from benchmark_scraper import BenchmarkScraper
             
             logger.info("Initializing benchmark scraper for specification extraction...")
-            scraper = BenchmarkScraper()
+            scraper = BenchmarkScraper(preprocessor=self)
             
             # Extract specifications and benchmark scores in one step
             # Note: This can take several minutes for large datasets
             logger.info("Starting benchmark score extraction (this may take 2-5 minutes)...")
             df_with_specs = scraper.add_benchmark_scores(df_laptop)
+            
+            # Replace benchmark scores of 0 with "Not found" for unmatched CPU/GPU
+            if 'cpu_benchmark_score' in df_with_specs.columns:
+                df_with_specs['cpu_benchmark_score'] = df_with_specs['cpu_benchmark_score'].replace(0, "Not found")
+            if 'gpu_benchmark_score' in df_with_specs.columns:
+                df_with_specs['gpu_benchmark_score'] = df_with_specs['gpu_benchmark_score'].replace(0, "Not found")
+            if 'total_benchmark_score' in df_with_specs.columns:
+                # For total score, replace 0 with "Not found" only if both CPU and GPU are 0
+                mask = (df_with_specs['cpu_benchmark_score'] == 0) & (df_with_specs['gpu_benchmark_score'] == 0)
+                df_with_specs.loc[mask, 'total_benchmark_score'] = "Not found"
             
             logger.info("Specifications and benchmark scores extracted successfully using benchmark scraper")
             return df_with_specs
@@ -1115,35 +1250,53 @@ class LaptopDataPreprocessor:
     
     def _add_basic_specifications(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
         """
-        Add basic specifications using built-in extraction methods.
+        Add basic CPU/GPU specifications using built-in extraction methods.
         
         Args:
             df_laptop (pd.DataFrame): Laptop dataframe
             
         Returns:
-            pd.DataFrame: Laptop dataframe with added specifications
+            pd.DataFrame: Laptop dataframe with added CPU/GPU specifications
         """
-        logger.info("Adding basic specifications using built-in methods...")
+        logger.info("Adding basic CPU/GPU specifications using built-in methods...")
         
         df_specs = df_laptop.copy()
         
-        # Extract specifications from details_parsed if available
-        if 'details_parsed' in df_specs.columns:
-            # Extract common specs
-            df_specs['ram_gb'] = df_specs['details_parsed'].apply(
-                lambda x: self._extract_spec(x, 'RAM', 'GB') if isinstance(x, dict) else None
-            )
-            df_specs['storage_gb'] = df_specs['details_parsed'].apply(
-                lambda x: self._extract_storage(x) if isinstance(x, dict) else None
-            )
-            df_specs['screen_size'] = df_specs['details_parsed'].apply(
-                lambda x: self._extract_spec(x, 'Screen Size', 'Inches') if isinstance(x, dict) else None
-            )
-            df_specs['processor'] = df_specs['details_parsed'].apply(
-                lambda x: self._extract_processor(x) if isinstance(x, dict) else None
-            )
+        # Combine text from all relevant columns for each row
+        def combine_text_columns(row):
+            text_parts = []
+            
+            # Add title_y if it exists
+            if 'title_y' in row.index and pd.notna(row['title_y']):
+                text_parts.append(str(row['title_y']))
+            
+            # Add features if it exists
+            if 'features' in row.index and pd.notna(row['features']):
+                text_parts.append(str(row['features']))
+            
+            # Add details if it exists
+            if 'details' in row.index and pd.notna(row['details']):
+                text_parts.append(str(row['details']))
+            
+            # Add details_parsed if it exists (processed details)
+            if 'details_parsed' in row.index and pd.notna(row['details_parsed']):
+                details_text = str(row['details_parsed'])
+                text_parts.append(details_text)
+            
+            return ' '.join(text_parts)
         
-        logger.info("Basic specifications added successfully")
+        # Extract CPU and GPU specifications for each row
+        df_specs['processor_model'] = df_specs.apply(
+            lambda row: self._extract_processor_name_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        df_specs['gpu_model'] = df_specs.apply(
+            lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        logger.info("Basic CPU/GPU specifications added successfully")
+        logger.info(f"Processor models found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"GPU models found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
         return df_specs
 
 

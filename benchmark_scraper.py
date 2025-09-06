@@ -14,141 +14,36 @@ from typing import Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup
 import json
 import os
-from urllib.parse import urljoin, quote
+from urllib.parse import quote
 import random
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class KnuthMorrisPratt:
-    """
-    Implementation of the Knuth-Morris-Pratt string search algorithm
-    for efficient pattern matching in CPU and GPU benchmark searches.
-    """
-    
-    def __init__(self):
-        """Initialize the KMP algorithm."""
-        pass
-    
-    def compute_lps(self, pattern: str) -> List[int]:
-        """
-        Compute the Longest Proper Prefix which is also Suffix (LPS) array.
-        
-        Args:
-            pattern (str): The pattern to search for
-            
-        Returns:
-            List[int]: LPS array for the pattern
-        """
-        lps = [0] * len(pattern)
-        length = 0  # Length of the previous longest prefix suffix
-        i = 1
-        
-        while i < len(pattern):
-            if pattern[i] == pattern[length]:
-                length += 1
-                lps[i] = length
-                i += 1
-            else:
-                if length != 0:
-                    length = lps[length - 1]
-                else:
-                    lps[i] = 0
-                    i += 1
-        
-        return lps
-    
-    def search(self, text: str, pattern: str) -> List[int]:
-        """
-        Search for pattern in text using KMP algorithm.
-        
-        Args:
-            text (str): The text to search in
-            pattern (str): The pattern to search for
-            
-        Returns:
-            List[int]: List of starting indices where pattern is found
-        """
-        if not pattern or not text:
-            return []
-        
-        n, m = len(text), len(pattern)
-        lps = self.compute_lps(pattern)
-        i = j = 0  # i for text, j for pattern
-        matches = []
-        
-        while i < n:
-            if pattern[j] == text[i]:
-                i += 1
-                j += 1
-            
-            if j == m:
-                matches.append(i - j)
-                j = lps[j - 1]
-            elif i < n and pattern[j] != text[i]:
-                if j != 0:
-                    j = lps[j - 1]
-                else:
-                    i += 1
-        
-        return matches
-    
-    def search_case_insensitive(self, text: str, pattern: str) -> List[int]:
-        """
-        Case-insensitive search using KMP algorithm.
-        
-        Args:
-            text (str): The text to search in
-            pattern (str): The pattern to search for
-            
-        Returns:
-            List[int]: List of starting indices where pattern is found
-        """
-        return self.search(text.lower(), pattern.lower())
-    
-    def find_best_match(self, text: str, patterns: List[str]) -> Tuple[str, float]:
-        """
-        Find the best matching pattern in text using KMP algorithm.
-        
-        Args:
-            text (str): The text to search in
-            patterns (List[str]): List of patterns to search for
-            
-        Returns:
-            Tuple[str, float]: (best_pattern, match_score)
-        """
-        if not patterns:
-            return "", 0.0
-        
-        best_pattern = ""
-        best_score = 0.0
-        
-        for pattern in patterns:
-            matches = self.search_case_insensitive(text, pattern)
-            if matches:
-                # Calculate match score based on pattern length and number of matches
-                score = len(pattern) * len(matches) / len(text)
-                if score > best_score:
-                    best_score = score
-                    best_pattern = pattern
-        
-        return best_pattern, best_score
 
 class BenchmarkScraper:
     """
     Scraper for CPU and GPU benchmark data from PassMark websites.
     """
     
-    def __init__(self):
+    def __init__(self, preprocessor=None):
         """Initialize the benchmark scraper."""
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
         
-        # Initialize KMP algorithm for efficient string searching
-        self.kmp = KnuthMorrisPratt()
+        # Initialize preprocessor for extraction methods
+        if preprocessor is None:
+            try:
+                from data_preprocessing import LaptopDataPreprocessor
+                self.preprocessor = LaptopDataPreprocessor()
+            except ImportError:
+                self.preprocessor = None
+                logger.warning("Could not import LaptopDataPreprocessor, using built-in extraction methods")
+        else:
+            self.preprocessor = preprocessor
         
         # Cache for benchmark data
         self.cpu_benchmarks = {}
@@ -225,6 +120,18 @@ class BenchmarkScraper:
         # Don't remove 'core' as it's part of the benchmark dictionary keys
         normalized = re.sub(r'@\s*\d+\.?\d*ghz', '', normalized)  # Remove clock speeds
         normalized = re.sub(r'\s+', ' ', normalized).strip()  # Clean up spaces
+        
+        # Handle manufacturer prefix consistency
+        if 'core i' in normalized and not normalized.startswith('intel'):
+            normalized = 'intel ' + normalized
+        elif 'celeron' in normalized and not normalized.startswith('intel'):
+            normalized = 'intel ' + normalized
+        elif 'pentium' in normalized and not normalized.startswith('intel'):
+            normalized = 'intel ' + normalized
+        elif 'ryzen' in normalized and not normalized.startswith('amd'):
+            normalized = 'amd ' + normalized
+        elif 'athlon' in normalized and not normalized.startswith('amd'):
+            normalized = 'amd ' + normalized
         
         return normalized
     
@@ -491,7 +398,7 @@ class BenchmarkScraper:
     
     def get_cpu_benchmark_score(self, processor_name: str) -> int:
         """
-        Get benchmark score for a processor using KMP algorithm for efficient matching.
+        Get benchmark score for a processor using regex pattern matching.
         
         Args:
             processor_name (str): Processor name
@@ -508,29 +415,18 @@ class BenchmarkScraper:
         if normalized_name in self.cpu_benchmarks:
             return self.cpu_benchmarks[normalized_name]
         
-        # Use KMP algorithm for efficient pattern matching
-        cpu_patterns = list(self.cpu_benchmarks.keys())
-        best_pattern, match_score = self.kmp.find_best_match(normalized_name, cpu_patterns)
+        # Use regex pattern matching for fuzzy matching
+        best_pattern = self._find_best_pattern_match(normalized_name, list(self.cpu_benchmarks.keys()))
         
-        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
+        if best_pattern:
             return self.cpu_benchmarks[best_pattern]
         
-        # If no match found in cache, try to search online
-        logger.info(f"CPU benchmark not found in cache for {processor_name}, searching online...")
-        online_score = self.search_cpu_benchmark(processor_name)
-        
-        if online_score:
-            # Cache the result
-            self.cpu_benchmarks[normalized_name] = online_score
-            self.save_cached_benchmarks()
-            return online_score
-        
-        # Default score for unknown processors
-        return 3000
+        # Return 0 if no match found (instead of None)
+        return 0
     
     def get_gpu_benchmark_score(self, gpu_name: str) -> int:
         """
-        Get benchmark score for a GPU using KMP algorithm for efficient matching.
+        Get benchmark score for a GPU using regex pattern matching.
         
         Args:
             gpu_name (str): GPU name
@@ -547,11 +443,10 @@ class BenchmarkScraper:
         if normalized_name in self.gpu_benchmarks:
             return self.gpu_benchmarks[normalized_name]
         
-        # Use KMP algorithm for efficient pattern matching
-        gpu_patterns = list(self.gpu_benchmarks.keys())
-        best_pattern, match_score = self.kmp.find_best_match(normalized_name, gpu_patterns)
+        # Use regex pattern matching for fuzzy matching
+        best_pattern = self._find_best_pattern_match(normalized_name, list(self.gpu_benchmarks.keys()))
         
-        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
+        if best_pattern:
             return self.gpu_benchmarks[best_pattern]
         
         # If no match found in cache, try to search online
@@ -564,446 +459,50 @@ class BenchmarkScraper:
             self.save_cached_benchmarks()
             return online_score
         
-        # Default score for unknown GPUs (integrated graphics)
-        return 500
+        # Return 0 if no match found (instead of None)
+        return 0
     
-    def _extract_cpu_benchmark_with_regex(self, text: str) -> int:
+    def _find_best_pattern_match(self, search_text: str, patterns: List[str]) -> Optional[str]:
         """
-        Extract CPU benchmark score using regex patterns for precise matching.
+        Find the best matching pattern using regex and similarity scoring.
         
         Args:
-            text (str): Text containing CPU information
+            search_text (str): Text to search for
+            patterns (List[str]): List of patterns to match against
             
         Returns:
-            int: CPU benchmark score
+            Optional[str]: Best matching pattern or None
         """
-        # Use cached benchmarks only - don't fetch during processing
-        if not self.cpu_benchmarks:
-            logger.warning("CPU benchmarks not loaded, using default score")
-            return 3000  # Default score
-        
-        # Convert to lowercase for case-insensitive matching
-        text_lower = text.lower()
-        
-        # Define regex patterns for different CPU families with exact model matching
-        cpu_patterns = {
-            # Intel Core i3 patterns - exact model matching
-            r'intel\s+core\s+i3[-\s](\d{4}[a-z0-9]+)': ('core i3', 'core i3-{}'),
-            r'i3[-\s](\d{4}[a-z0-9]+)': ('core i3', 'core i3-{}'),
-            
-            # Intel Core i5 patterns - exact model matching
-            r'intel\s+core\s+i5[-\s](\d{4}[a-z0-9]+)': ('core i5', 'core i5-{}'),
-            r'i5[-\s](\d{4}[a-z0-9]+)': ('core i5', 'core i5-{}'),
-            
-            # Intel Core i7 patterns - exact model matching
-            r'intel\s+core\s+i7[-\s](\d{4}[a-z0-9]+)': ('core i7', 'core i7-{}'),
-            r'i7[-\s](\d{4}[a-z0-9]+)': ('core i7', 'core i7-{}'),
-            
-            # Intel Core i9 patterns - exact model matching
-            r'intel\s+core\s+i9[-\s](\d{4}[a-z0-9]+)': ('core i9', 'core i9-{}'),
-            r'i9[-\s](\d{4}[a-z0-9]+)': ('core i9', 'core i9-{}'),
-            
-            # Intel Celeron patterns - exact model matching
-            r'intel\s+celeron[-\s]([a-z0-9]+)': ('celeron', 'celeron {}'),
-            r'celeron[-\s]([a-z0-9]+)': ('celeron', 'celeron {}'),
-            
-            # Intel Pentium patterns - exact model matching
-            r'intel\s+pentium[-\s]([a-z0-9\s]+)': ('pentium', 'pentium {}'),
-            r'pentium[-\s]([a-z0-9\s]+)': ('pentium', 'pentium {}'),
-            
-            # AMD Ryzen patterns - exact model matching
-            r'amd\s+ryzen\s+(\d+)[-\s](\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            r'ryzen\s+(\d+)[-\s](\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            
-            # AMD Athlon patterns - exact model matching
-            r'amd\s+athlon[-\s]([a-z0-9]+)': ('athlon', 'athlon {}'),
-            r'athlon[-\s]([a-z0-9]+)': ('athlon', 'athlon {}'),
-            
-            # AMD A series patterns - exact model matching
-            r'amd\s+a(\d+)[-\s]([a-z0-9]+)': ('a6', 'a{}-{}'),
-            r'a(\d+)[-\s]([a-z0-9]+)': ('a6', 'a{}-{}'),
-            
-            # Apple M series patterns - exact model matching
-            r'apple\s+m(\d+)': ('m1', 'm{}'),
-            r'm(\d+)': ('m1', 'm{}'),
-            
-            # Additional patterns for better matching
-            # Intel Core patterns with different spacing
-            r'intel\s+core\s+i(\d+)[-\s](\d{4}[a-z0-9]+)': ('core i{}', 'core i{}-{}'),
-            r'core\s+i(\d+)[-\s](\d{4}[a-z0-9]+)': ('core i{}', 'core i{}-{}'),
-            
-            # AMD Ryzen patterns with different spacing
-            r'amd\s+ryzen\s+(\d+)\s+(\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            r'ryzen\s+(\d+)\s+(\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-        }
-        
-        # Try to match specific models first
-        for pattern, (family, model_format) in cpu_patterns.items():
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            if matches:
-                # Try to find exact model match
-                for match in matches:
-                    if isinstance(match, tuple):
-                        # Handle patterns with multiple groups (like Ryzen)
-                        try:
-                            model_name = model_format.format(*match).lower()
-                        except (IndexError, TypeError):
-                            # Fallback for tuple formatting issues
-                            model_name = f"{family}-{'-'.join(match)}".lower()
-                    else:
-                        # Handle single group matches
-                        try:
-                            model_name = model_format.format(match).lower()
-                        except (IndexError, TypeError):
-                            # Fallback for single group formatting issues
-                            model_name = f"{family}-{match}".lower()
-                    
-                    # Try exact match first
-                    if model_name in self.cpu_benchmarks:
-                        return self.cpu_benchmarks[model_name]
-                    
-                    # Try family match
-                    if family in self.cpu_benchmarks:
-                        return self.cpu_benchmarks[family]
-        
-        # Use KMP algorithm for efficient pattern matching with cached data
-        cpu_patterns_list = list(self.cpu_benchmarks.keys())
-        best_pattern, match_score = self.kmp.find_best_match(text_lower, cpu_patterns_list)
-        
-        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
-            return self.cpu_benchmarks[best_pattern]
-        
-        # Fallback to family-based matching
-        family_keywords = {
-            'core i3': ['i3', 'core i3'],
-            'core i5': ['i5', 'core i5'],
-            'core i7': ['i7', 'core i7'],
-            'core i9': ['i9', 'core i9'],
-            'ryzen 3': ['ryzen 3'],
-            'ryzen 5': ['ryzen 5'],
-            'ryzen 7': ['ryzen 7'],
-            'ryzen 9': ['ryzen 9'],
-            'celeron': ['celeron'],
-            'athlon': ['athlon'],
-            'pentium': ['pentium'],
-            'ryzen': ['ryzen']
-        }
-        
-        for family, keywords in family_keywords.items():
-            for keyword in keywords:
-                if keyword in text_lower:
-                    return self.cpu_benchmarks.get(family, 3000)
-        
-        # Default score for unknown processors
-        return 3000
-    
-    def _extract_gpu_benchmark_with_regex(self, text: str) -> int:
-        """
-        Extract GPU benchmark score using regex patterns for precise matching.
-        
-        Args:
-            text (str): Text containing GPU information
-            
-        Returns:
-            int: GPU benchmark score
-        """
-        # Use cached benchmarks only - don't fetch during processing
-        if not self.gpu_benchmarks:
-            logger.warning("GPU benchmarks not loaded, using default score")
-            return 500  # Default score
-        
-        # Convert to lowercase for case-insensitive matching
-        text_lower = text.lower()
-        
-        # Define regex patterns for different GPU families
-        gpu_patterns = {
-            # Intel UHD Graphics patterns
-            r'intel\s+uhd\s+graphics\s*(\d*)': 'intel uhd graphics',
-            r'uhd\s+graphics\s*(\d*)': 'intel uhd graphics',
-            
-            # Intel Iris Xe Graphics patterns
-            r'intel\s+iris\s+xe\s+graphics\s*([a-z0-9]*)': 'intel iris xe graphics',
-            r'iris\s+xe\s+graphics\s*([a-z0-9]*)': 'intel iris xe graphics',
-            
-            # AMD Radeon Vega patterns
-            r'amd\s+radeon\s+vega\s*(\d+)': 'amd radeon vega',
-            r'radeon\s+vega\s*(\d+)': 'amd radeon vega',
-            
-            # AMD Radeon Graphics patterns
-            r'amd\s+radeon\s+graphics': 'amd radeon graphics',
-            r'radeon\s+graphics': 'amd radeon graphics',
-            
-            # NVIDIA GeForce GTX patterns
-            r'nvidia\s+geforce\s+gtx\s*(\d{4}[a-z]*)': 'geforce gtx',
-            r'geforce\s+gtx\s*(\d{4}[a-z]*)': 'geforce gtx',
-            r'gtx\s*(\d{4}[a-z]*)': 'geforce gtx',
-            
-            # NVIDIA GeForce RTX patterns
-            r'nvidia\s+geforce\s+rtx\s*(\d{4}[a-z]*)': 'geforce rtx',
-            r'geforce\s+rtx\s*(\d{4}[a-z]*)': 'geforce rtx',
-            r'rtx\s*(\d{4}[a-z]*)': 'geforce rtx',
-            
-            # NVIDIA Quadro patterns
-            r'nvidia\s+quadro\s*([a-z0-9]+)': 'quadro',
-            r'quadro\s*([a-z0-9]+)': 'quadro',
-            
-            # AMD Radeon RX patterns
-            r'amd\s+radeon\s+rx\s*(\d{4}[a-z]*)': 'radeon rx',
-            r'radeon\s+rx\s*(\d{4}[a-z]*)': 'radeon rx',
-            r'rx\s*(\d{4}[a-z]*)': 'radeon rx',
-            
-            # AMD Radeon Pro patterns
-            r'amd\s+radeon\s+pro\s*(\d{4}[a-z]*)': 'radeon pro',
-            r'radeon\s+pro\s*(\d{4}[a-z]*)': 'radeon pro',
-        }
-        
-        # Try to match specific models first
-        for pattern, family in gpu_patterns.items():
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            if matches:
-                # Try to find exact model match
-                for match in matches:
-                    if match:  # If we have a specific model number
-                        # Clean up the match and create model name
-                        clean_match = match.strip()
-                        if family == 'intel uhd graphics':
-                            model_name = f"{family} {clean_match}"
-                        elif family == 'intel iris xe graphics':
-                            model_name = f"{family} {clean_match}"
-                        elif family == 'amd radeon vega':
-                            model_name = f"amd radeon vega {clean_match}"
-                        elif family == 'geforce gtx':
-                            model_name = f"geforce gtx {clean_match}"
-                        elif family == 'geforce rtx':
-                            model_name = f"geforce rtx {clean_match}"
-                        elif family == 'quadro':
-                            model_name = f"quadro {clean_match}"
-                        elif family == 'radeon rx':
-                            model_name = f"radeon rx {clean_match}"
-                        elif family == 'radeon pro':
-                            model_name = f"radeon pro {clean_match}"
-                        else:
-                            model_name = f"{family} {clean_match}"
-                        
-                        if model_name in self.gpu_benchmarks:
-                            return self.gpu_benchmarks[model_name]
-                    
-                    # Try family match
-                    if family in self.gpu_benchmarks:
-                        return self.gpu_benchmarks[family]
-        
-        # Use KMP algorithm for efficient pattern matching with cached data
-        gpu_patterns_list = list(self.gpu_benchmarks.keys())
-        best_pattern, match_score = self.kmp.find_best_match(text_lower, gpu_patterns_list)
-        
-        if best_pattern and match_score > 0.1:  # Threshold for acceptable match
-            return self.gpu_benchmarks[best_pattern]
-        
-        # Fallback to family-based matching
-        family_keywords = {
-            'intel uhd graphics': ['uhd', 'intel uhd'],
-            'intel iris xe graphics': ['iris xe', 'intel iris'],
-            'amd radeon vega': ['radeon vega', 'vega'],
-            'amd radeon graphics': ['radeon', 'amd radeon'],
-            'geforce gtx': ['gtx', 'geforce gtx'],
-            'geforce rtx': ['rtx', 'geforce rtx'],
-            'quadro': ['quadro'],
-            'radeon rx': ['rx', 'radeon rx'],
-            'radeon pro': ['radeon pro']
-        }
-        
-        for family, keywords in family_keywords.items():
-            for keyword in keywords:
-                if keyword in text_lower:
-                    return self.gpu_benchmarks.get(family, 500)
-        
-        # Default score for unknown GPUs (integrated graphics)
-        return 500
-    
-    def _extract_ram_from_text(self, text: str) -> Optional[float]:
-        """
-        Extract RAM capacity from text using regex patterns.
-        
-        Args:
-            text (str): Text containing RAM information
-            
-        Returns:
-            Optional[float]: RAM capacity in GB, None if not found
-        """
-        if not text or pd.isna(text):
+        if not patterns or not search_text:
             return None
         
-        text_str = str(text).lower()
+        best_pattern = None
+        best_score = 0.0
         
-        # RAM patterns with various formats
-        ram_patterns = [
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*|ram|memory)',  # 8GB DDR4, 16GB RAM
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ddr\d*)',  # 8GB DDR4
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ram)',  # 8GB RAM
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:memory)',  # 8GB Memory
-            r'(\d+(?:\.\d+)?)\s*gb',  # 8GB (fallback)
-            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ddr\d*|ram|memory)',  # 1TB DDR4
-            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback)
-        ]
+        # Split search text into words for better matching
+        search_words = set(search_text.lower().split())
         
-        for pattern in ram_patterns:
-            matches = re.findall(pattern, text_str, re.IGNORECASE)
-            if matches:
-                value = float(matches[0])
-                # Convert TB to GB
-                if 'tb' in text_str and 'gb' not in text_str:
-                    value *= 1024
-                return value
-        
-        return None
-    
-    def _extract_storage_from_text(self, text: str) -> Optional[float]:
-        """
-        Extract storage capacity from text using regex patterns.
-        
-        Args:
-            text (str): Text containing storage information
+        for pattern in patterns:
+            pattern_words = set(pattern.lower().split())
             
-        Returns:
-            Optional[float]: Storage capacity in GB, None if not found
-        """
-        if not text or pd.isna(text):
-            return None
-        
-        text_str = str(text).lower()
-        
-        # Storage patterns with various formats - prioritize storage-specific terms
-        storage_patterns = [
-            # High priority: explicit storage terms with capacity
-            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 1TB SSD, 2TB NVMe
-            r'(\d+(?:\.\d+)?)\s*tb\s*(?:ssd|hdd|nvme|pcie)',  # 1TB SSD, 2TB NVMe
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|hard\s*drive|storage|flash\s*storage|nvme|pcie)',  # 512GB SSD, 1TB HDD
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:ssd|hdd|nvme|pcie)',  # 512GB SSD
-            
-            # Medium priority: storage with less specific terms
-            r'(\d+(?:\.\d+)?)\s*tb\s*(?:hard\s*drive|storage)',  # 1TB hard drive
-            r'(\d+(?:\.\d+)?)\s*gb\s*(?:hard\s*drive|storage)',  # 512GB hard drive
-            
-            # Lower priority: just numbers with storage context
-            r'(\d+(?:\.\d+)?)\s*tb',  # 1TB (fallback, but check context)
-            r'(\d+(?:\.\d+)?)\s*gb',  # 512GB (fallback, but check context)
-        ]
-        
-        # First try high-priority patterns
-        for i, pattern in enumerate(storage_patterns):
-            matches = re.findall(pattern, text_str, re.IGNORECASE)
-            if matches:
-                value = float(matches[0])
+            # Calculate word overlap score
+            common_words = search_words.intersection(pattern_words)
+            if common_words:
+                # Score based on word overlap ratio and pattern length
+                overlap_ratio = len(common_words) / max(len(search_words), len(pattern_words))
+                length_score = min(len(pattern), len(search_text)) / max(len(pattern), len(search_text))
+                score = overlap_ratio * 0.7 + length_score * 0.3
                 
-                # Check if this pattern matched TB or GB
-                # Look for the pattern in the original text to see the unit
-                pattern_match = re.search(pattern, text_str, re.IGNORECASE)
-                if pattern_match:
-                    matched_text = pattern_match.group(0).lower()
-                    # If the pattern contains TB, convert to GB
-                    if 'tb' in matched_text and 'gb' not in matched_text[:matched_text.find('tb')]:
-                        value *= 1024
-                
-                # For lower priority patterns, verify it's actually storage
-                if i >= 6:  # Lower priority patterns
-                    # Check if this might be RAM instead of storage
-                    if any(term in text_str for term in ['ram', 'memory', 'ddr', 'lpddr']):
-                        # Skip if this looks like RAM
-                        continue
-                
-                return value
+                if score > best_score and score > 0.3:  # Minimum threshold
+                    best_score = score
+                    best_pattern = pattern
         
-        return None
+        return best_pattern
     
-    def _extract_screen_size_from_text(self, text: str) -> Optional[float]:
-        """
-        Extract screen size from text using regex patterns.
-        
-        Args:
-            text (str): Text containing screen size information
-            
-        Returns:
-            Optional[float]: Screen size in inches, None if not found
-        """
-        if not text or pd.isna(text):
-            return None
-        
-        text_str = str(text).lower()
-        
-        # Screen size patterns
-        screen_patterns = [
-            r'(\d+(?:\.\d+)?)\s*inch',  # 15.6 inch
-            r'(\d+(?:\.\d+)?)\s*"',  # 15.6"
-            r'(\d+(?:\.\d+)?)\s*in',  # 15.6 in
-            r'(\d+(?:\.\d+)?)\s*inches',  # 15.6 inches
-        ]
-        
-        for pattern in screen_patterns:
-            matches = re.findall(pattern, text_str, re.IGNORECASE)
-            if matches:
-                return float(matches[0])
-        
-        return None
     
-    def _extract_storage_type_from_text(self, text: str) -> Optional[str]:
-        """
-        Extract storage type from text using regex patterns.
-        
-        Args:
-            text (str): Text containing storage type information
-            
-        Returns:
-            Optional[str]: Storage type (SSD, HDD, Hybrid, etc.), None if not found
-        """
-        if not text or pd.isna(text):
-            return None
-        
-        text_str = str(text).lower()
-        
-        # Storage type patterns
-        if 'ssd' in text_str:
-            if 'nvme' in text_str:
-                return 'NVMe SSD'
-            elif 'pcie' in text_str:
-                return 'PCIe SSD'
-            else:
-                return 'SSD'
-        elif 'hdd' in text_str or 'hard drive' in text_str or 'hard disk' in text_str:
-            return 'HDD'
-        elif 'hybrid' in text_str or 'sshdd' in text_str:
-            return 'Hybrid'
-        elif 'emmc' in text_str:
-            return 'eMMC'
-        elif 'flash' in text_str:
-            return 'Flash Storage'
-        
-        return None
     
-    def _extract_ram_type_from_text(self, text: str) -> Optional[str]:
-        """
-        Extract RAM type from text using regex patterns.
-        
-        Args:
-            text (str): Text containing RAM type information
-            
-        Returns:
-            Optional[str]: RAM type (DDR4, DDR5, LPDDR4, etc.), None if not found
-        """
-        if not text or pd.isna(text):
-            return None
-        
-        text_str = str(text).lower()
-        
-        # RAM type patterns
-        ram_types = ['ddr5', 'ddr4', 'ddr3', 'lpddr5', 'lpddr4', 'lpddr3']
-        
-        for ram_type in ram_types:
-            if ram_type in text_str:
-                return ram_type.upper()
-        
-        return None
     
-    def _extract_processor_model_from_text(self, text: str) -> Optional[str]:
+    def _extract_processor_name_from_text(self, text: str) -> Optional[str]:
         """
         Extract processor model from text using regex patterns.
         
@@ -1018,14 +517,40 @@ class BenchmarkScraper:
         
         text_str = str(text).lower()
         
-        # Processor patterns
+        # Processor patterns - comprehensive patterns to capture complete processor names
         processor_patterns = [
-            r'(intel\s+core\s+i[3579]-\d+[a-z]*\d*)',  # Intel Core i5-1135G7
+            # Intel Core i series - various formats
+            r'(intel\s+core\s+i[3579]-\d+[a-z]*\d*)',  # Intel Core i7-5950HQ, i5-1135G7
+            r'(intel\s+core\s+i[3579]\s+\d+[a-z]*\d*)',  # Intel Core i7 5950HQ (space instead of dash)
+            r'(core\s+i[3579]-\d+[a-z]*\d*)',  # Core i7-5950HQ (without Intel)
+            r'(core\s+i[3579]\s+\d+[a-z]*\d*)',  # Core i7 5950HQ (without Intel, space)
+            r'(i[3579]-\d+[a-z]*\d*)',  # i7-5950HQ (minimal format)
+            
+            # AMD Ryzen series - various formats
             r'(amd\s+ryzen\s+[3579]\s+\d+[a-z]*\d*)',  # AMD Ryzen 5 5500U
+            r'(amd\s+ryzen\s+[3579]-\d+[a-z]*\d*)',  # AMD Ryzen 5-5500U (with dash)
+            r'(ryzen\s+[3579]\s+\d+[a-z]*\d*)',  # Ryzen 5 5500U (without AMD)
+            r'(ryzen\s+[3579]-\d+[a-z]*\d*)',  # Ryzen 5-5500U (without AMD, with dash)
+            
+            # Intel Celeron series
             r'(intel\s+celeron\s+[a-z]*\d*)',  # Intel Celeron N4020
+            r'(celeron\s+[a-z]*\d*)',  # Celeron N4020 (without Intel)
+            
+            # Intel Pentium series
             r'(intel\s+pentium\s+[a-z]*\d*)',  # Intel Pentium Gold 7505
+            r'(pentium\s+[a-z]*\d*)',  # Pentium Gold 7505 (without Intel)
+            
+            # AMD Athlon series
             r'(amd\s+athlon\s+\d+[a-z]*)',  # AMD Athlon 300U
+            r'(athlon\s+\d+[a-z]*)',  # Athlon 300U (without AMD)
+            
+            # Apple M series
             r'(apple\s+m\d+\s*[a-z]*)',  # Apple M1 Pro
+            r'(m\d+\s*[a-z]*)',  # M1 Pro (without Apple)
+            
+            # AMD A series
+            r'(amd\s+a\d+\s+[a-z]*\d*)',  # AMD A10-7850K
+            r'(a\d+\s+[a-z]*\d*)',  # A10-7850K (without AMD)
         ]
         
         for pattern in processor_patterns:
@@ -1035,7 +560,7 @@ class BenchmarkScraper:
         
         return None
     
-    def _extract_gpu_model_from_text(self, text: str) -> Optional[str]:
+    def _extract_gpu_name_from_text(self, text: str) -> Optional[str]:
         """
         Extract GPU model from text using regex patterns.
         
@@ -1050,17 +575,51 @@ class BenchmarkScraper:
         
         text_str = str(text).lower()
         
-        # GPU patterns
+        # GPU patterns - comprehensive patterns to capture complete GPU names
         gpu_patterns = [
+            # Intel Graphics - various formats
             r'(intel\s+uhd\s+graphics\s*\d*)',  # Intel UHD Graphics 600
+            r'(intel\s+uhd\s+graphics)',  # Intel UHD Graphics (without number)
+            r'(uhd\s+graphics\s*\d*)',  # UHD Graphics 600 (without Intel)
+            r'(uhd\s+graphics)',  # UHD Graphics (without Intel, without number)
+            
             r'(intel\s+iris\s+xe\s+graphics\s*[a-z0-9]*)',  # Intel Iris Xe Graphics G7
+            r'(intel\s+iris\s+xe\s+graphics)',  # Intel Iris Xe Graphics (without suffix)
+            r'(iris\s+xe\s+graphics\s*[a-z0-9]*)',  # Iris Xe Graphics G7 (without Intel)
+            r'(iris\s+xe\s+graphics)',  # Iris Xe Graphics (without Intel, without suffix)
+            
+            r'(intel\s+iris\s+pro\s+graphics\s*[a-z0-9]*)',  # Intel Iris Pro Graphics 5200
+            r'(intel\s+iris\s+graphics\s*[a-z0-9]*)',  # Intel Iris Graphics 6100
+            r'(intel\s+hd\s+graphics\s*\d*)',  # Intel HD Graphics 4000
+            
+            # AMD Radeon Graphics - various formats
             r'(amd\s+radeon\s+vega\s*\d+)',  # AMD Radeon Vega 7
-            r'(amd\s+radeon\s+graphics)',  # AMD Radeon Graphics
-            r'(nvidia\s+geforce\s+gtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce GTX 1650
-            r'(nvidia\s+geforce\s+rtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce RTX 3060
-            r'(nvidia\s+quadro\s*[a-z0-9]+)',  # NVIDIA Quadro T1000
+            r'(radeon\s+vega\s*\d+)',  # Radeon Vega 7 (without AMD)
+            
             r'(amd\s+radeon\s+rx\s*\d{4}[a-z]*)',  # AMD Radeon RX 5500M
+            r'(radeon\s+rx\s*\d{4}[a-z]*)',  # Radeon RX 5500M (without AMD)
+            
             r'(amd\s+radeon\s+pro\s*\d{4}[a-z]*)',  # AMD Radeon Pro 5500M
+            r'(radeon\s+pro\s*\d{4}[a-z]*)',  # Radeon Pro 5500M (without AMD)
+            
+            r'(amd\s+radeon\s+graphics)',  # AMD Radeon Graphics
+            r'(radeon\s+graphics)',  # Radeon Graphics (without AMD)
+            
+            # NVIDIA Graphics - various formats
+            r'(nvidia\s+geforce\s+gtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce GTX 1650
+            r'(geforce\s+gtx\s*\d{4}[a-z]*)',  # GeForce GTX 1650 (without NVIDIA)
+            r'(gtx\s*\d{4}[a-z]*)',  # GTX 1650 (minimal format)
+            
+            r'(nvidia\s+geforce\s+rtx\s*\d{4}[a-z]*)',  # NVIDIA GeForce RTX 3060
+            r'(geforce\s+rtx\s*\d{4}[a-z]*)',  # GeForce RTX 3060 (without NVIDIA)
+            r'(rtx\s*\d{4}[a-z]*)',  # RTX 3060 (minimal format)
+            
+            r'(nvidia\s+quadro\s*[a-z0-9]+)',  # NVIDIA Quadro T1000
+            r'(quadro\s*[a-z0-9]+)',  # Quadro T1000 (without NVIDIA)
+            
+            r'(nvidia\s+geforce\s+mx\s*\d{3}[a-z]*)',  # NVIDIA GeForce MX350
+            r'(geforce\s+mx\s*\d{3}[a-z]*)',  # GeForce MX350 (without NVIDIA)
+            r'(mx\s*\d{3}[a-z]*)',  # MX350 (minimal format)
         ]
         
         for pattern in gpu_patterns:
@@ -1103,8 +662,18 @@ class BenchmarkScraper:
         # Combine all text
         combined_text = ' '.join(text_parts)
         
-        # Extract CPU information using regex patterns
-        return self._extract_cpu_benchmark_with_regex(combined_text)
+        # First extract the processor model name from the combined text
+        if self.preprocessor:
+            processor_model = self.preprocessor._extract_processor_name_from_text(combined_text)
+        else:
+            processor_model = self._extract_processor_name_from_text(combined_text)
+        
+        if processor_model:
+            # Use the extracted processor name with regex pattern matching
+            return self.get_cpu_benchmark_score(processor_model)
+        else:
+            # Fallback: use the combined text if no specific processor model found
+            return self.get_cpu_benchmark_score(combined_text)
     
     def _get_gpu_benchmark_from_columns(self, row: pd.Series) -> int:
         """
@@ -1139,12 +708,22 @@ class BenchmarkScraper:
         # Combine all text
         combined_text = ' '.join(text_parts)
         
-        # Extract GPU information using regex patterns
-        return self._extract_gpu_benchmark_with_regex(combined_text)
+        # First extract the GPU model name from the combined text
+        if self.preprocessor:
+            gpu_model = self.preprocessor._extract_gpu_name_from_text(combined_text)
+        else:
+            gpu_model = self._extract_gpu_name_from_text(combined_text)
+        
+        if gpu_model:
+            # Use the extracted GPU name with regex pattern matching
+            return self.get_gpu_benchmark_score(gpu_model)
+        else:
+            # Fallback: use the combined text if no specific GPU model found
+            return self.get_gpu_benchmark_score(combined_text)
     
     def debug_cpu_matching(self, text: str) -> Dict:
         """
-        Debug function to test CPU regex matching and see what's happening.
+        Debug function to test CPU matching and see what's happening.
         
         Args:
             text (str): Text containing CPU information
@@ -1152,237 +731,17 @@ class BenchmarkScraper:
         Returns:
             Dict: Debug information about the matching process
         """
-        if not self.cpu_benchmarks:
-            self.fetch_cpu_benchmarks()
+        # Simple debug function that just uses the actual function
+        score = self.get_cpu_benchmark_score(text)
+        normalized = self.normalize_processor_name(text)
         
-        debug_info = {
+        return {
             'input_text': text,
-            'text_lower': text.lower(),
-            'matches_found': [],
-            'model_names_tried': [],
-            'benchmark_scores_found': [],
-            'final_score': None
+            'normalized_name': normalized,
+            'final_score': score,
+            'match_type': 'actual_function'
         }
-        
-        # Convert to lowercase for case-insensitive matching
-        text_lower = text.lower()
-        
-        # Define regex patterns for different CPU families with exact model matching
-        cpu_patterns = {
-            # Intel Core i3 patterns - exact model matching
-            r'intel\s+core\s+i3[-\s](\d{4}[a-z0-9]+)': ('core i3', 'core i3-{}'),
-            r'i3[-\s](\d{4}[a-z0-9]+)': ('core i3', 'core i3-{}'),
-            
-            # Intel Core i5 patterns - exact model matching
-            r'intel\s+core\s+i5[-\s](\d{4}[a-z0-9]+)': ('core i5', 'core i5-{}'),
-            r'i5[-\s](\d{4}[a-z0-9]+)': ('core i5', 'core i5-{}'),
-            
-            # Intel Core i7 patterns - exact model matching
-            r'intel\s+core\s+i7[-\s](\d{4}[a-z0-9]+)': ('core i7', 'core i7-{}'),
-            r'i7[-\s](\d{4}[a-z0-9]+)': ('core i7', 'core i7-{}'),
-            
-            # Intel Core i9 patterns - exact model matching
-            r'intel\s+core\s+i9[-\s](\d{4}[a-z0-9]+)': ('core i9', 'core i9-{}'),
-            r'i9[-\s](\d{4}[a-z0-9]+)': ('core i9', 'core i9-{}'),
-            
-            # Intel Celeron patterns - exact model matching
-            r'intel\s+celeron[-\s]([a-z0-9]+)': ('celeron', 'celeron {}'),
-            r'celeron[-\s]([a-z0-9]+)': ('celeron', 'celeron {}'),
-            
-            # Intel Pentium patterns - exact model matching
-            r'intel\s+pentium[-\s]([a-z0-9\s]+)': ('pentium', 'pentium {}'),
-            r'pentium[-\s]([a-z0-9\s]+)': ('pentium', 'pentium {}'),
-            
-            # AMD Ryzen patterns - exact model matching
-            r'amd\s+ryzen\s+(\d+)[-\s](\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            r'ryzen\s+(\d+)[-\s](\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            
-            # AMD Athlon patterns - exact model matching
-            r'amd\s+athlon[-\s]([a-z0-9]+)': ('athlon', 'athlon {}'),
-            r'athlon[-\s]([a-z0-9]+)': ('athlon', 'athlon {}'),
-            
-            # AMD A series patterns - exact model matching
-            r'amd\s+a(\d+)[-\s]([a-z0-9]+)': ('a6', 'a{}-{}'),
-            r'a(\d+)[-\s]([a-z0-9]+)': ('a6', 'a{}-{}'),
-            
-            # Apple M series patterns - exact model matching
-            r'apple\s+m(\d+)': ('m1', 'm{}'),
-            r'm(\d+)': ('m1', 'm{}'),
-            
-            # Additional patterns for better matching
-            # Intel Core patterns with different spacing
-            r'intel\s+core\s+i(\d+)[-\s](\d{4}[a-z0-9]+)': ('core i{}', 'core i{}-{}'),
-            r'core\s+i(\d+)[-\s](\d{4}[a-z0-9]+)': ('core i{}', 'core i{}-{}'),
-            
-            # AMD Ryzen patterns with different spacing
-            r'amd\s+ryzen\s+(\d+)\s+(\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-            r'ryzen\s+(\d+)\s+(\d{4}[a-z]?)': ('ryzen', 'ryzen {} {}'),
-        }
-        
-        # Try to match specific models first
-        for pattern, (family, model_format) in cpu_patterns.items():
-            matches = re.findall(pattern, text_lower, re.IGNORECASE)
-            if matches:
-                debug_info['matches_found'].append({
-                    'pattern': pattern,
-                    'family': family,
-                    'model_format': model_format,
-                    'matches': matches
-                })
-                
-                # Try to find exact model match
-                for match in matches:
-                    if isinstance(match, tuple):
-                        # Handle patterns with multiple groups (like Ryzen)
-                        try:
-                            model_name = model_format.format(*match).lower()
-                        except (IndexError, TypeError):
-                            # Fallback for tuple formatting issues
-                            model_name = f"{family}-{'-'.join(match)}".lower()
-                    else:
-                        # Handle single group matches
-                        try:
-                            model_name = model_format.format(match).lower()
-                        except (IndexError, TypeError):
-                            # Fallback for single group formatting issues
-                            model_name = f"{family}-{match}".lower()
-                    
-                    debug_info['model_names_tried'].append(model_name)
-                    
-                    # Try exact match first
-                    if model_name in self.cpu_benchmarks:
-                        score = self.cpu_benchmarks[model_name]
-                        debug_info['benchmark_scores_found'].append({
-                            'model_name': model_name,
-                            'score': score,
-                            'match_type': 'exact'
-                        })
-                        debug_info['final_score'] = score
-                        return debug_info
-                    
-                    # Try family match
-                    if family in self.cpu_benchmarks:
-                        score = self.cpu_benchmarks[family]
-                        debug_info['benchmark_scores_found'].append({
-                            'model_name': family,
-                            'score': score,
-                            'match_type': 'family'
-                        })
-                        debug_info['final_score'] = score
-                        return debug_info
-        
-        # Fallback to family-based matching
-        family_keywords = {
-            'core i3': ['i3', 'core i3'],
-            'core i5': ['i5', 'core i5'],
-            'core i7': ['i7', 'core i7'],
-            'core i9': ['i9', 'core i9'],
-            'ryzen 3': ['ryzen 3'],
-            'ryzen 5': ['ryzen 5'],
-            'ryzen 7': ['ryzen 7'],
-            'ryzen 9': ['ryzen 9'],
-            'celeron': ['celeron'],
-            'athlon': ['athlon'],
-            'pentium': ['pentium'],
-            'ryzen': ['ryzen']
-        }
-        
-        for family, keywords in family_keywords.items():
-            for keyword in keywords:
-                if keyword in text_lower:
-                    score = self.cpu_benchmarks.get(family, 3000)
-                    debug_info['benchmark_scores_found'].append({
-                        'model_name': family,
-                        'score': score,
-                        'match_type': 'keyword_fallback'
-                    })
-                    debug_info['final_score'] = score
-                    return debug_info
-        
-        # Default score for unknown processors
-        default_score = self.cpu_benchmarks.get('unknown', 3000)
-        debug_info['benchmark_scores_found'].append({
-            'model_name': 'unknown',
-            'score': default_score,
-            'match_type': 'default'
-        })
-        debug_info['final_score'] = default_score
-        return debug_info
     
-    def get_specification_statistics(self, df: pd.DataFrame) -> Dict:
-        """
-        Get statistics about extracted specifications in the dataset.
-        
-        Args:
-            df (pd.DataFrame): Dataframe with specification columns
-            
-        Returns:
-            Dict: Statistics about specifications
-        """
-        stats = {}
-        
-        # RAM statistics
-        if 'ram_gb' in df.columns:
-            ram_stats = df['ram_gb'].describe()
-            stats['ram_stats'] = {
-                'mean': float(ram_stats['mean']) if not pd.isna(ram_stats['mean']) else None,
-                'median': float(df['ram_gb'].median()) if not df['ram_gb'].isna().all() else None,
-                'min': int(ram_stats['min']) if not pd.isna(ram_stats['min']) else None,
-                'max': int(ram_stats['max']) if not pd.isna(ram_stats['max']) else None,
-                'std': float(ram_stats['std']) if not pd.isna(ram_stats['std']) else None,
-                'total_found': int(df['ram_gb'].notna().sum()),
-                'total_rows': len(df)
-            }
-            
-            if 'ram_category' in df.columns:
-                stats['ram_category_distribution'] = df['ram_category'].value_counts().to_dict()
-        
-        # Storage statistics
-        if 'storage_gb' in df.columns:
-            storage_stats = df['storage_gb'].describe()
-            stats['storage_stats'] = {
-                'mean': float(storage_stats['mean']) if not pd.isna(storage_stats['mean']) else None,
-                'median': float(df['storage_gb'].median()) if not df['storage_gb'].isna().all() else None,
-                'min': int(storage_stats['min']) if not pd.isna(storage_stats['min']) else None,
-                'max': int(storage_stats['max']) if not pd.isna(storage_stats['max']) else None,
-                'std': float(storage_stats['std']) if not pd.isna(storage_stats['std']) else None,
-                'total_found': int(df['storage_gb'].notna().sum()),
-                'total_rows': len(df)
-            }
-            
-            if 'storage_category' in df.columns:
-                stats['storage_category_distribution'] = df['storage_category'].value_counts().to_dict()
-            
-            if 'storage_type' in df.columns:
-                stats['storage_type_distribution'] = df['storage_type'].value_counts().to_dict()
-        
-        # Screen size statistics
-        if 'screen_size_inches' in df.columns:
-            screen_stats = df['screen_size_inches'].describe()
-            stats['screen_stats'] = {
-                'mean': float(screen_stats['mean']) if not pd.isna(screen_stats['mean']) else None,
-                'median': float(df['screen_size_inches'].median()) if not df['screen_size_inches'].isna().all() else None,
-                'min': float(screen_stats['min']) if not pd.isna(screen_stats['min']) else None,
-                'max': float(screen_stats['max']) if not pd.isna(screen_stats['max']) else None,
-                'std': float(screen_stats['std']) if not pd.isna(screen_stats['std']) else None,
-                'total_found': int(df['screen_size_inches'].notna().sum()),
-                'total_rows': len(df)
-            }
-            
-            if 'screen_category' in df.columns:
-                stats['screen_category_distribution'] = df['screen_category'].value_counts().to_dict()
-        
-        # Processor and GPU model distributions
-        if 'processor_model' in df.columns:
-            stats['processor_model_distribution'] = df['processor_model'].value_counts().head(10).to_dict()
-        
-        if 'gpu_model' in df.columns:
-            stats['gpu_model_distribution'] = df['gpu_model'].value_counts().head(10).to_dict()
-        
-        if 'ram_type' in df.columns:
-            stats['ram_type_distribution'] = df['ram_type'].value_counts().to_dict()
-        
-        return stats
 
     def add_benchmark_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -1470,15 +829,15 @@ class BenchmarkScraper:
     
     def add_specifications_from_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Extract and add laptop specifications from title_y, features, and details columns.
+        Extract and add CPU/GPU specifications from title_y, features, and details columns.
         
         Args:
             df (pd.DataFrame): Input dataframe with title_y, features, and details columns
             
         Returns:
-            pd.DataFrame: Dataframe with added specification columns
+            pd.DataFrame: Dataframe with added CPU/GPU specification columns
         """
-        logger.info("Extracting laptop specifications from columns...")
+        logger.info("Extracting CPU/GPU specifications from columns...")
         
         df_specs = df.copy()
         
@@ -1505,95 +864,28 @@ class BenchmarkScraper:
             
             return ' '.join(text_parts)
         
-        # Extract specifications for each row
-        df_specs['ram_gb'] = df_specs.apply(
-            lambda row: self._extract_ram_from_text(combine_text_columns(row)), axis=1
-        )
+        # Extract CPU and GPU specifications for each row using preprocessor methods if available
+        if self.preprocessor:
+            df_specs['processor_model'] = df_specs.apply(
+                lambda row: self.preprocessor._extract_processor_name_from_text(combine_text_columns(row)), axis=1
+            )
+            
+            df_specs['gpu_model'] = df_specs.apply(
+                lambda row: self.preprocessor._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
+            )
+        else:
+            # Fallback to built-in methods
+            df_specs['processor_model'] = df_specs.apply(
+                lambda row: self._extract_processor_name_from_text(combine_text_columns(row)), axis=1
+            )
+            
+            df_specs['gpu_model'] = df_specs.apply(
+                lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
+            )
         
-        df_specs['storage_gb'] = df_specs.apply(
-            lambda row: self._extract_storage_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        df_specs['screen_size_inches'] = df_specs.apply(
-            lambda row: self._extract_screen_size_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        df_specs['storage_type'] = df_specs.apply(
-            lambda row: self._extract_storage_type_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        df_specs['ram_type'] = df_specs.apply(
-            lambda row: self._extract_ram_type_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        df_specs['processor_model'] = df_specs.apply(
-            lambda row: self._extract_processor_model_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        df_specs['gpu_model'] = df_specs.apply(
-            lambda row: self._extract_gpu_model_from_text(combine_text_columns(row)), axis=1
-        )
-        
-        # Add storage categories
-        def get_storage_category(storage_gb):
-            if pd.isna(storage_gb):
-                return 'Unknown'
-            elif storage_gb < 256:
-                return 'Small (<256GB)'
-            elif storage_gb < 512:
-                return 'Medium (256-512GB)'
-            elif storage_gb < 1000:
-                return 'Large (512GB-1TB)'
-            else:
-                return 'Very Large (>1TB)'
-        
-        df_specs['storage_category'] = df_specs['storage_gb'].apply(get_storage_category)
-        
-        # Add storage display values (in appropriate units)
-        def get_storage_display(storage_gb):
-            if pd.isna(storage_gb):
-                return None
-            elif storage_gb >= 1024:
-                return f"{storage_gb/1024:.1f}TB"
-            else:
-                return f"{storage_gb:.0f}GB"
-        
-        df_specs['storage_display'] = df_specs['storage_gb'].apply(get_storage_display)
-        
-        # Add RAM categories
-        def get_ram_category(ram_gb):
-            if pd.isna(ram_gb):
-                return 'Unknown'
-            elif ram_gb < 8:
-                return 'Low (<8GB)'
-            elif ram_gb < 16:
-                return 'Medium (8-16GB)'
-            elif ram_gb < 32:
-                return 'High (16-32GB)'
-            else:
-                return 'Very High (>32GB)'
-        
-        df_specs['ram_category'] = df_specs['ram_gb'].apply(get_ram_category)
-        
-        # Add screen size categories
-        def get_screen_category(screen_inches):
-            if pd.isna(screen_inches):
-                return 'Unknown'
-            elif screen_inches < 13:
-                return 'Small (<13")'
-            elif screen_inches < 15:
-                return 'Medium (13-15")'
-            elif screen_inches < 17:
-                return 'Large (15-17")'
-            else:
-                return 'Very Large (>17")'
-        
-        df_specs['screen_category'] = df_specs['screen_size_inches'].apply(get_screen_category)
-        
-        logger.info("Specifications extracted successfully")
-        logger.info(f"RAM found: {df_specs['ram_gb'].notna().sum()}/{len(df_specs)} rows")
-        logger.info(f"Storage found: {df_specs['storage_gb'].notna().sum()}/{len(df_specs)} rows")
-        logger.info(f"Screen size found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
+        logger.info("CPU/GPU specifications extracted successfully")
+        logger.info(f"Processor models found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"GPU models found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
         
         return df_specs
     
@@ -1635,64 +927,11 @@ class BenchmarkScraper:
         
         return stats
     
-    def test_kmp_performance(self, test_data: List[str]) -> Dict:
-        """
-        Test the performance of KMP algorithm vs traditional string matching.
-        
-        Args:
-            test_data (List[str]): List of processor/GPU names to test
-            
-        Returns:
-            Dict: Performance comparison results
-        """
-        import time
-        
-        logger.info("Testing KMP algorithm performance...")
-        
-        # Test traditional string matching
-        start_time = time.time()
-        traditional_matches = 0
-        for item in test_data:
-            for pattern in list(self.cpu_benchmarks.keys())[:50]:  # Test with first 50 patterns
-                if pattern in item.lower() or item.lower() in pattern:
-                    traditional_matches += 1
-                    break
-        traditional_time = time.time() - start_time
-        
-        # Test KMP algorithm
-        start_time = time.time()
-        kmp_matches = 0
-        for item in test_data:
-            patterns = list(self.cpu_benchmarks.keys())[:50]  # Test with first 50 patterns
-            best_pattern, score = self.kmp.find_best_match(item, patterns)
-            if best_pattern:
-                kmp_matches += 1
-        kmp_time = time.time() - start_time
-        
-        performance_results = {
-            'traditional_matching': {
-                'time': traditional_time,
-                'matches': traditional_matches,
-                'avg_time_per_item': traditional_time / len(test_data) if test_data else 0
-            },
-            'kmp_matching': {
-                'time': kmp_time,
-                'matches': kmp_matches,
-                'avg_time_per_item': kmp_time / len(test_data) if test_data else 0
-            },
-            'speedup': traditional_time / kmp_time if kmp_time > 0 else float('inf'),
-            'efficiency_gain': ((traditional_time - kmp_time) / traditional_time * 100) if traditional_time > 0 else 0
-        }
-        
-        logger.info(f"KMP algorithm is {performance_results['speedup']:.2f}x faster than traditional matching")
-        logger.info(f"Efficiency gain: {performance_results['efficiency_gain']:.2f}%")
-        
-        return performance_results
 
 
 def main():
     """
-    Main function to test the benchmark scraper with KMP algorithm.
+    Main function to test the benchmark scraper with regex pattern matching.
     """
     scraper = BenchmarkScraper()
     
@@ -1721,8 +960,8 @@ def main():
         ]
     })
     
-    # Test KMP algorithm performance
-    print("Testing KMP algorithm performance...")
+    # Test processor matching functionality
+    print("Testing processor matching functionality...")
     test_processors = [
         'Intel Core i5-1135G7',
         'AMD Ryzen 5 5500U',
@@ -1736,12 +975,10 @@ def main():
         'Apple M1 Pro'
     ]
     
-    performance_results = scraper.test_kmp_performance(test_processors)
-    print(f"\nKMP Performance Results:")
-    print(f"Traditional matching time: {performance_results['traditional_matching']['time']:.4f}s")
-    print(f"KMP matching time: {performance_results['kmp_matching']['time']:.4f}s")
-    print(f"Speedup: {performance_results['speedup']:.2f}x")
-    print(f"Efficiency gain: {performance_results['efficiency_gain']:.2f}%")
+    print("\n=== Testing Processor Matching ===")
+    for processor in test_processors:
+        score = scraper.get_cpu_benchmark_score(processor)
+        print(f"{processor}: {score}")
     
     # Test debug functionality for specific processors
     print("\n=== Testing Debug Functionality ===")
@@ -1756,11 +993,9 @@ def main():
         print(f"\n--- Testing: {processor} ---")
         debug_result = scraper.debug_cpu_matching(processor)
         print(f"Input: {debug_result['input_text']}")
+        print(f"Normalized: {debug_result['normalized_name']}")
         print(f"Final Score: {debug_result['final_score']}")
-        print(f"Match Type: {debug_result['benchmark_scores_found'][-1]['match_type'] if debug_result['benchmark_scores_found'] else 'No match'}")
-        print(f"Model Names Tried: {debug_result['model_names_tried']}")
-        if debug_result['matches_found']:
-            print(f"Regex Matches: {debug_result['matches_found']}")
+        print(f"Match Type: {debug_result['match_type']}")
     
     # Add benchmark scores
     result = scraper.add_benchmark_scores(test_data)
@@ -1769,10 +1004,8 @@ def main():
     print(result[['title_y', 'cpu_benchmark_score', 'gpu_benchmark_score', 
                  'total_benchmark_score', 'performance_tier', 'gaming_capability']])
     
-    print("\nSample specification results:")
-    spec_columns = ['ram_gb', 'storage_gb', 'screen_size_inches', 'storage_type', 
-                   'ram_type', 'processor_model', 'gpu_model', 'storage_category', 
-                   'ram_category', 'screen_category']
+    print("\nSample CPU/GPU specification results:")
+    spec_columns = ['processor_model', 'gpu_model']
     available_spec_cols = [col for col in spec_columns if col in result.columns]
     if available_spec_cols:
         print(result[['title_y'] + available_spec_cols])
@@ -1781,11 +1014,6 @@ def main():
     stats = scraper.get_benchmark_statistics(result)
     print("\nBenchmark statistics:")
     print(json.dumps(stats, indent=2))
-    
-    # Get specification statistics
-    spec_stats = scraper.get_specification_statistics(result)
-    print("\nSpecification statistics:")
-    print(json.dumps(spec_stats, indent=2))
     
     # Show all columns in the result
     print(f"\nTotal columns in result: {len(result.columns)}")
