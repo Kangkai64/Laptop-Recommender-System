@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-Setup script for Laptop Recommender MCP Server
+Setup script for Laptop Recommender System
 
-This script helps set up the MCP server and verify the installation.
+This script helps set up the complete laptop recommender system including:
+- Main application dependencies (requirements.txt)
+- Collaborative filtering dependencies (requirements_collaborative_filtering.txt)
+- Content-based filtering dependencies (requirements_content_based_filtering.txt)
+
+The script installs all dependencies and verifies the installation.
 """
 
 import os
@@ -33,28 +38,68 @@ def check_data_file():
     return True
 
 def install_dependencies():
-    """Install required dependencies."""
+    """Install required dependencies from all requirements files."""
     print("\n📦 Installing dependencies...")
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
-        print("✅ Dependencies installed successfully")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install dependencies: {e}")
-        return False
+    
+    requirements_files = [
+        "requirements.txt",
+        "requirements_collaborative_filtering.txt", 
+        "requirements_content_based_filtering.txt"
+    ]
+    
+    for req_file in requirements_files:
+        if not os.path.exists(req_file):
+            print(f"⚠️ Warning: {req_file} not found, skipping...")
+            continue
+            
+        print(f"📦 Installing from {req_file}...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
+            print(f"✅ Dependencies from {req_file} installed successfully")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to install dependencies from {req_file}: {e}")
+            return False
+    
+    print("✅ All dependencies installed successfully")
+    return True
 
 def test_imports():
     """Test if all required modules can be imported."""
     print("\n🔍 Testing imports...")
-    required_modules = [
+    
+    # Core modules from main requirements
+    core_modules = [
         "pandas",
         "numpy", 
         "sklearn",
-        "mcp"
+        "mcp",
+        "flask",
+        "fastapi",
+        "uvicorn"
     ]
     
+    # Additional modules from collaborative filtering requirements
+    collaborative_modules = [
+        "scipy",
+        "datasets"
+    ]
+    
+    # Additional modules from content-based filtering requirements
+    content_modules = [
+        "nltk",
+        "textblob",
+        "psutil",
+        "matplotlib",
+        "seaborn",
+        "tqdm",
+        "joblib"
+    ]
+    
+    all_modules = core_modules + collaborative_modules + content_modules
     failed_imports = []
-    for module in required_modules:
+    
+    print("📦 Testing core modules...")
+    for module in core_modules:
         try:
             __import__(module)
             print(f"✅ {module}")
@@ -62,11 +107,28 @@ def test_imports():
             print(f"❌ {module}")
             failed_imports.append(module)
     
+    print("\n📦 Testing collaborative filtering modules...")
+    for module in collaborative_modules:
+        try:
+            __import__(module)
+            print(f"✅ {module}")
+        except ImportError:
+            print(f"⚠️ {module} (optional)")
+    
+    print("\n📦 Testing content-based filtering modules...")
+    for module in content_modules:
+        try:
+            __import__(module)
+            print(f"✅ {module}")
+        except ImportError:
+            print(f"⚠️ {module} (optional)")
+    
     if failed_imports:
-        print(f"\n❌ Failed to import: {', '.join(failed_imports)}")
+        print(f"\n❌ Failed to import core modules: {', '.join(failed_imports)}")
         return False
     
-    print("✅ All modules imported successfully")
+    print("\n✅ All core modules imported successfully")
+    print("ℹ️ Some optional modules may not be available, but core functionality should work")
     return True
 
 def create_mcp_config():
@@ -101,28 +163,33 @@ def create_mcp_config():
         return False
 
 def show_next_steps():
-    """Show next steps for using the MCP server."""
+    """Show next steps for using the laptop recommender system."""
     print("\n🎯 Setup Complete!")
     print("=" * 50)
     print("\n📖 Next Steps:")
-    print("1. Run the MCP server:")
+    print("1. Run the Flask web application:")
+    print("   python app.py")
+    print("\n2. Run the MCP server (optional):")
     print("   python laptop_recommender_mcp.py")
-    print("\n2. Configure your AI assistant:")
-    print("   - Add the mcp_config.json to your MCP settings")
-    print("   - Or use the server directly with MCP-compatible tools")
-    print("\n3. Test the server:")
-    print("   python test_mcp_server.py")
-    print("\n4. Available tools:")
-    print("   - get_recommendations: Get personalized laptop suggestions")
-    print("   - get_similar_laptops: Find similar laptops")
-    print("   - get_laptop_details: Get detailed laptop information")
-    print("   - get_statistics: View dataset statistics")
-    print("   - search_laptops: Search by brand, processor, etc.")
-    print("\n📚 For more information, see README.md")
+    print("\n3. Test the recommendation system:")
+    print("   python demo_recommender_system.py")
+    print("   python demo_evaluation_system.py")
+    print("\n4. Available components:")
+    print("   - Web Application: Interactive web interface")
+    print("   - Collaborative Filtering: User-based recommendations")
+    print("   - Content-Based Filtering: Feature-based recommendations")
+    print("   - MCP Server: AI assistant integration")
+    print("   - Evaluation System: Performance testing")
+    print("\n5. Web interface features:")
+    print("   - Browse and search laptops")
+    print("   - Get personalized recommendations")
+    print("   - Compare laptops side-by-side")
+    print("   - View detailed specifications")
+    print("\n📚 For more information, see README.md and other documentation files")
 
 def main():
     """Main setup function."""
-    print("🚀 Laptop Recommender MCP Server Setup")
+    print("🚀 Laptop Recommender System Setup")
     print("=" * 50)
     
     # Check system requirements

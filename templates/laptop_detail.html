@@ -215,7 +215,7 @@
                     </div>
                     
                     <div class="row mb-3">
-                        {% if laptop.screen_size_inches %}
+                        {% if laptop.screen_size_inches and laptop.screen_size_inches != "Not found" and laptop.screen_size_inches != "Unknown" %}
                         <div class="col-md-6">
                             <h6><i class="fas fa-desktop me-2 text-primary"></i>Screen Size</h6>
                             <p class="text-muted">{{ laptop.screen_size_inches }}"</p>
@@ -250,7 +250,7 @@
                     <!-- Performance Scores -->
                     {% if laptop.cpu_benchmark_score or laptop.gpu_benchmark_score %}
                     <div class="row mb-3">
-                        {% if laptop.cpu_benchmark_score %}
+                        {% if laptop.cpu_benchmark_score and laptop.cpu_benchmark_score != 3000 %}
                         <div class="col-md-6">
                             <h6><i class="fas fa-tachometer-alt me-2 text-primary"></i>CPU Performance</h6>
                             <p class="text-muted">
@@ -266,7 +266,7 @@
                         </div>
                         {% endif %}
                         
-                        {% if laptop.gpu_benchmark_score %}
+                        {% if laptop.gpu_benchmark_score and laptop.gpu_benchmark_score != 500 %}
                         <div class="col-md-6">
                             <h6><i class="fas fa-gamepad me-2 text-primary"></i>GPU Performance</h6>
                             <p class="text-muted">
@@ -509,7 +509,7 @@
                                         </small>
                                     </div>
                                     {% endif %}
-                                    {% if similar.screen_size_inches and similar.screen_size_inches > 0 %}
+                                    {% if similar.screen_size_inches and similar.screen_size_inches != "Not found" and similar.screen_size_inches != "Unknown" and similar.screen_size_inches > 0 %}
                                     <div class="col-6">
                                         <small class="text-muted">
                                             <i class="fas fa-desktop me-1"></i>
@@ -529,7 +529,7 @@
                             </div>
                             
                             <!-- Benchmark Scores -->
-                            {% if similar.cpu_benchmark_score and similar.cpu_benchmark_score > 0 %}
+                            {% if similar.cpu_benchmark_score and similar.cpu_benchmark_score > 0 and similar.cpu_benchmark_score != 3000 %}
                             <div class="mb-3">
                                 <div class="row g-1">
                                     <div class="col-6">
@@ -538,7 +538,7 @@
                                             CPU: {{ similar.cpu_benchmark_score|int }}
                                         </small>
                                     </div>
-                                    {% if similar.gpu_benchmark_score and similar.gpu_benchmark_score > 0 %}
+                                    {% if similar.gpu_benchmark_score and similar.gpu_benchmark_score > 0 and similar.gpu_benchmark_score != 500 %}
                                     <div class="col-6">
                                         <small class="text-muted">
                                             <i class="fas fa-gamepad me-1 text-success"></i>

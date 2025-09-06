@@ -17,8 +17,8 @@ import warnings
 from datetime import datetime
 
 # Import our recommendation algorithms
-from content_based_filtering import ContentBasedFiltering, create_content_based_filtering
-from collaborative_filtering import CollaborativeFiltering, create_collaborative_filtering
+from content_based_filtering import create_content_based_filtering
+from collaborative_filtering import create_collaborative_filtering
 from data_preprocessing import LaptopDataPreprocessor
 
 # Configure logging

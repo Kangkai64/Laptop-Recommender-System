@@ -1044,9 +1044,6 @@ class LaptopDataPreprocessor:
                 return ram_type.upper()
         
         return None
-    
-    
-    
 
     def save_cached_data(self, df_laptop: pd.DataFrame, df_rating: pd.DataFrame, 
                         cache_dir: str = "data/cache") -> None:
@@ -1067,7 +1064,7 @@ class LaptopDataPreprocessor:
             rating_cache_path = os.path.join(cache_dir, "rating_data.parquet")
             metadata_path = os.path.join(cache_dir, "cache_metadata.json")
             
-            # Save dataframes
+            # Save dataframes (no need for data type conversion since we use numeric values)
             df_laptop.to_parquet(laptop_cache_path, index=False)
             df_rating.to_parquet(rating_cache_path, index=False)
             
@@ -1222,15 +1219,15 @@ class LaptopDataPreprocessor:
             logger.info("Starting benchmark score extraction (this may take 2-5 minutes)...")
             df_with_specs = scraper.add_benchmark_scores(df_laptop)
             
-            # Replace benchmark scores of 0 with "Not found" for unmatched CPU/GPU
+            # Replace benchmark scores of 0 with default values for unmatched CPU/GPU
             if 'cpu_benchmark_score' in df_with_specs.columns:
-                df_with_specs['cpu_benchmark_score'] = df_with_specs['cpu_benchmark_score'].replace(0, "Not found")
+                df_with_specs['cpu_benchmark_score'] = df_with_specs['cpu_benchmark_score'].replace(0, 3000)
             if 'gpu_benchmark_score' in df_with_specs.columns:
-                df_with_specs['gpu_benchmark_score'] = df_with_specs['gpu_benchmark_score'].replace(0, "Not found")
+                df_with_specs['gpu_benchmark_score'] = df_with_specs['gpu_benchmark_score'].replace(0, 500)
             if 'total_benchmark_score' in df_with_specs.columns:
-                # For total score, replace 0 with "Not found" only if both CPU and GPU are 0
+                # For total score, replace 0 with default value only if both CPU and GPU are 0
                 mask = (df_with_specs['cpu_benchmark_score'] == 0) & (df_with_specs['gpu_benchmark_score'] == 0)
-                df_with_specs.loc[mask, 'total_benchmark_score'] = "Not found"
+                df_with_specs.loc[mask, 'total_benchmark_score'] = 3000 * 0.7 + 500 * 0.3  # Weighted combination
             
             logger.info("Specifications and benchmark scores extracted successfully using benchmark scraper")
             return df_with_specs
@@ -1285,7 +1282,7 @@ class LaptopDataPreprocessor:
             
             return ' '.join(text_parts)
         
-        # Extract CPU and GPU specifications for each row
+        # Extract CPU, GPU, and screen size specifications for each row
         df_specs['processor_model'] = df_specs.apply(
             lambda row: self._extract_processor_name_from_text(combine_text_columns(row)), axis=1
         )
@@ -1294,9 +1291,14 @@ class LaptopDataPreprocessor:
             lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
         )
         
-        logger.info("Basic CPU/GPU specifications added successfully")
+        df_specs['screen_size_inches'] = df_specs.apply(
+            lambda row: self._extract_screen_size_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        logger.info("Basic CPU/GPU/Screen size specifications added successfully")
         logger.info(f"Processor models found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
         logger.info(f"GPU models found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"Screen sizes found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
         return df_specs
 
 
