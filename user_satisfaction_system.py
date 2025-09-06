@@ -18,11 +18,9 @@ import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
 import sqlite3
-import os
-from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,7 +35,7 @@ class SatisfactionResponse:
     timestamp: str
     question_id: str
     response_value: Any
-    response_type: str  # 'rating', 'text', 'multiple_choice'
+    response_type: str  # 'rating', 'text'
     context: Dict[str, Any]  # Additional context like laptop_id, recommendation_method
 
 

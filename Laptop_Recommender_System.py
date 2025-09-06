@@ -654,6 +654,24 @@ class LaptopRecommenderSystem:
             if 'price_myr' not in laptop_data:
                 laptop_data['price_myr'] = 0.0
             
+            # Ensure specifications are available (these are extracted during preprocessing)
+            if 'ram_gb' not in laptop_data:
+                laptop_data['ram_gb'] = None
+            if 'storage_gb' not in laptop_data:
+                laptop_data['storage_gb'] = None
+            if 'screen_size_inches' not in laptop_data:
+                laptop_data['screen_size_inches'] = None
+            if 'processor_model' not in laptop_data:
+                laptop_data['processor_model'] = None
+            if 'gpu_model' not in laptop_data:
+                laptop_data['gpu_model'] = None
+            if 'storage_type' not in laptop_data:
+                laptop_data['storage_type'] = None
+            if 'ram_type' not in laptop_data:
+                laptop_data['ram_type'] = None
+            if 'os' not in laptop_data:
+                laptop_data['os'] = None
+            
             return laptop_data
             
         except Exception as e:

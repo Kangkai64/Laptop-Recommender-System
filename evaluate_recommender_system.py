@@ -263,10 +263,16 @@ class RecommenderSystemEvaluator:
     def _evaluate_hybrid_system(self) -> Dict[str, Any]:
         """Evaluate hybrid recommendation system performance."""
         try:
-            # Test hybrid recommendations
+            # Test hybrid recommendations with actual user IDs from the data
+            if self.df_rating is not None and len(self.df_rating) > 0:
+                # Get actual user IDs from the rating data
+                available_users = self.df_rating['user_id_encoded'].unique()[:2]  # Use first 2 users
+            else:
+                available_users = [12723, 5285]  # Fallback to known user IDs
+            
             test_scenarios = [
                 {
-                    'user_id': 1,
+                    'user_id': available_users[0],
                     'preferences': {
                         'search_terms': ['gaming', 'performance'],
                         'min_rating': 4.0,
@@ -274,7 +280,7 @@ class RecommenderSystemEvaluator:
                     }
                 },
                 {
-                    'user_id': 2,
+                    'user_id': available_users[1],
                     'preferences': {
                         'search_terms': ['student', 'budget'],
                         'min_rating': 3.5,
@@ -665,10 +671,21 @@ class RecommenderSystemEvaluator:
         return np.random.uniform(0.7, 0.9)
     
     def save_evaluation_results(self, filename: str = None) -> str:
-        """Save evaluation results to a JSON file."""
+        """Save evaluation results to a JSON file in the results folder."""
+        import os
+        
+        # Create results directory if it doesn't exist
+        results_dir = "results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+        
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"evaluation_results_{timestamp}.json"
+        
+        # Ensure filename is in results directory
+        if not filename.startswith(results_dir):
+            filename = os.path.join(results_dir, filename)
         
         try:
             with open(filename, 'w') as f:

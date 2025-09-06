@@ -741,10 +741,18 @@ def laptop_detail(laptop_id):
             logger.warning(f"Could not parse videos for laptop {laptop_id}: {e}")
             videos = []
     
+    # Get rating data for this laptop
+    laptop_ratings = []
+    if df_rating is not None and 'asin' in df_rating.columns:
+        laptop_asin = laptop.get('asin')
+        if laptop_asin:
+            laptop_ratings = df_rating[df_rating['asin'] == laptop_asin].to_dict('records')
+    
     return render_template('laptop_detail.html', 
                          laptop=laptop, 
                          similar_laptops=similar_laptops,
-                         videos=videos)
+                         videos=videos,
+                         laptop_ratings=laptop_ratings)
 
 @app.route('/search')
 def search():

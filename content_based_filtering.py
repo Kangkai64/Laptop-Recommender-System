@@ -746,18 +746,18 @@ class ContentBasedFiltering:
         
         try:
             # Handle text preferences (search terms)
-            if 'search_terms' in preferences and preferences['search_terms']:
+            if 'search_terms' in preferences and preferences['search_terms'] and self.tfidf_vectorizer is not None:
                 search_text = ' '.join(preferences['search_terms'])
-                # Use TF-IDF to vectorize search terms
-                search_tfidf = TfidfVectorizer(
-                    max_features=self.config['tfidf_params']['max_features'],
-                    stop_words='english'
-                )
-                search_vector = search_tfidf.fit_transform([search_text]).toarray()[0]
+                # Use the same TF-IDF vectorizer that was used to create the feature matrix
+                search_vector = self.tfidf_vectorizer.transform([search_text]).toarray()[0]
                 
-                # Map to text features in our matrix
-                text_feature_count = self.config['tfidf_params']['max_features']
-                preference_vector[:text_feature_count] = search_vector[:text_feature_count]
+                # Map to text features in our matrix - use the actual number of text features
+                text_feature_count = search_vector.shape[0]
+                if text_feature_count <= preference_vector.shape[0]:
+                    preference_vector[:text_feature_count] = search_vector
+                else:
+                    # If search vector is larger, truncate it
+                    preference_vector[:preference_vector.shape[0]] = search_vector[:preference_vector.shape[0]]
             
             # Handle numerical preferences
             if 'max_price' in preferences:

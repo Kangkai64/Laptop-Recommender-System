@@ -499,9 +499,6 @@ class BenchmarkScraper:
         
         return best_pattern
     
-    
-    
-    
     def _extract_processor_name_from_text(self, text: str) -> Optional[str]:
         """
         Extract processor model from text using regex patterns.
@@ -626,59 +623,6 @@ class BenchmarkScraper:
             matches = re.findall(pattern, text_str, re.IGNORECASE)
             if matches:
                 return matches[0].title()
-        
-        return None
-    
-    def _extract_screen_size_from_text(self, text: str) -> Optional[float]:
-        """
-        Extract screen size from text using comprehensive regex patterns.
-        This method searches for screen size information in laptop titles and descriptions.
-        
-        Args:
-            text (str): Text containing screen size information
-            
-        Returns:
-            Optional[float]: Screen size in inches, None if not found
-        """
-        if not text or pd.isna(text):
-            return None
-        
-        text_str = str(text).lower()
-        
-        # Comprehensive screen size patterns to catch various formats
-        screen_patterns = [
-            # Standard formats with hyphen (e.g., "13-inch", "14-inch")
-            r'(\d+(?:\.\d+)?)-inch',  # 13-inch, 14-inch, 15.6-inch
-            r'(\d+(?:\.\d+)?)\s*inch',  # 15.6 inch
-            r'(\d+(?:\.\d+)?)\s*"',  # 15.6"
-            r'(\d+(?:\.\d+)?)\s*in',  # 15.6 in
-            r'(\d+(?:\.\d+)?)\s*inches',  # 15.6 inches
-            
-            # Formats with display type (e.g., "15.6 Full HD", "15.6 144hz")
-            r'(\d+(?:\.\d+)?)\s+(?:full\s+hd|fhd|qhd|uhd|4k|144hz|120hz|60hz|ips|oled|led)',  # 15.6 Full HD
-            r'(\d+(?:\.\d+)?)\s+(?:display|screen|monitor)',  # 15.6 Display
-            
-            # Formats with resolution (e.g., "15.6 1920x1080")
-            r'(\d+(?:\.\d+)?)\s+\d+x\d+',  # 15.6 1920x1080
-            
-            # Formats with refresh rate (e.g., "15.6 144Hz")
-            r'(\d+(?:\.\d+)?)\s+\d+hz',  # 15.6 144Hz
-            
-            # Formats with panel type (e.g., "15.6 IPS", "15.6 OLED")
-            r'(\d+(?:\.\d+)?)\s+(?:ips|oled|led|tn|va)',  # 15.6 IPS
-            
-            # Edge case: just the number followed by space and any word (common in titles)
-            r'(\d+(?:\.\d+)?)\s+\w+',  # 15.6 Gaming, 15.6 Touch, etc.
-        ]
-        
-        # Try each pattern and return the first match
-        for pattern in screen_patterns:
-            matches = re.findall(pattern, text_str, re.IGNORECASE)
-            if matches:
-                screen_size = float(matches[0])
-                # Validate that it's a reasonable screen size (between 10 and 20 inches)
-                if 10.0 <= screen_size <= 20.0:
-                    return screen_size
         
         return None
     
@@ -877,12 +821,13 @@ class BenchmarkScraper:
         
         df_with_specs['gaming_capability'] = df_with_specs.apply(get_gaming_capability, axis=1)
         
-        logger.info("Benchmark scores and specifications added successfully")
+        logger.info("CPU/GPU benchmark scores added successfully")
         return df_with_specs
     
     def add_specifications_from_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Extract and add CPU/GPU specifications from title_y, features, and details columns.
+        NOTE: This method is deprecated. Use the preprocessor's add_specifications method instead.
         
         Args:
             df (pd.DataFrame): Input dataframe with title_y, features, and details columns
@@ -890,7 +835,7 @@ class BenchmarkScraper:
         Returns:
             pd.DataFrame: Dataframe with added CPU/GPU specification columns
         """
-        logger.info("Extracting CPU/GPU specifications from columns...")
+        logger.info("Extracting CPU/GPU specifications from columns (deprecated method)...")
         
         df_specs = df.copy()
         
@@ -917,7 +862,7 @@ class BenchmarkScraper:
             
             return ' '.join(text_parts)
         
-        # Extract CPU, GPU, and screen size specifications for each row using preprocessor methods if available
+        # Extract CPU and GPU specifications for each row using preprocessor methods if available
         if self.preprocessor:
             df_specs['processor_model'] = df_specs.apply(
                 lambda row: self.preprocessor._extract_processor_name_from_text(combine_text_columns(row)), axis=1
@@ -925,10 +870,6 @@ class BenchmarkScraper:
             
             df_specs['gpu_model'] = df_specs.apply(
                 lambda row: self.preprocessor._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
-            )
-            
-            df_specs['screen_size_inches'] = df_specs.apply(
-                lambda row: self.preprocessor._extract_screen_size_from_text(combine_text_columns(row)), axis=1
             )
         else:
             # Fallback to built-in methods
@@ -938,10 +879,6 @@ class BenchmarkScraper:
             
             df_specs['gpu_model'] = df_specs.apply(
                 lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
-            )
-            
-            df_specs['screen_size_inches'] = df_specs.apply(
-                lambda row: self._extract_screen_size_from_text(combine_text_columns(row)), axis=1
             )
         
         logger.info("CPU/GPU/Screen size specifications extracted successfully")

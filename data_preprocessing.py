@@ -1181,10 +1181,13 @@ class LaptopDataPreprocessor:
         # Step 4: Add price conversion
         df_laptop = self.add_price_conversion(df_laptop)
         
-        # Step 5: Add specifications using benchmark scraper
-        df_laptop = self.add_specifications_from_benchmark_scraper(df_laptop)
+        # Step 5: Add benchmark scores
+        df_laptop = self.add_benchmark_scores(df_laptop)
+
+        # Step 6: Add specifications
+        df_laptop = self.add_specifications(df_laptop)
         
-        # Step 6: Normalize data
+        # Step 7: Normalize data
         df_laptop_normalized = self.normalize_laptop_data(df_laptop)
         df_rating_normalized = self.normalize_rating_data(df_rating)
         
@@ -1198,9 +1201,56 @@ class LaptopDataPreprocessor:
         
         return df_laptop_normalized, df_rating_normalized
 
-    def add_specifications_from_benchmark_scraper(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
+    def add_benchmark_scores(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
         """
-        Add laptop specifications using the benchmark scraper.
+        Add CPU and GPU benchmark scores using the benchmark scraper.
+        
+        Args:
+            df_laptop (pd.DataFrame): Laptop dataframe
+            
+        Returns:
+            pd.DataFrame: Laptop dataframe with added benchmark scores
+        """
+        try:
+            from benchmark_scraper import BenchmarkScraper
+            
+            logger.info("Initializing benchmark scraper for CPU/GPU benchmark extraction...")
+            scraper = BenchmarkScraper(preprocessor=self)
+            
+            # Extract only CPU and GPU benchmark scores
+            # Note: This can take several minutes for large datasets
+            logger.info("Starting CPU/GPU benchmark score extraction (this may take 2-5 minutes)...")
+            df_with_benchmarks = scraper.add_benchmark_scores(df_laptop)
+            
+            # Replace benchmark scores of 0 with default values for unmatched CPU/GPU
+            if 'cpu_benchmark_score' in df_with_benchmarks.columns:
+                df_with_benchmarks['cpu_benchmark_score'] = df_with_benchmarks['cpu_benchmark_score'].replace(0, 3000)
+            if 'gpu_benchmark_score' in df_with_benchmarks.columns:
+                df_with_benchmarks['gpu_benchmark_score'] = df_with_benchmarks['gpu_benchmark_score'].replace(0, 500)
+            if 'total_benchmark_score' in df_with_benchmarks.columns:
+                # For total score, replace 0 with default value only if both CPU and GPU are 0
+                mask = (df_with_benchmarks['cpu_benchmark_score'] == 0) & (df_with_benchmarks['gpu_benchmark_score'] == 0)
+                df_with_benchmarks.loc[mask, 'total_benchmark_score'] = 3000 * 0.7 + 500 * 0.3  # Weighted combination
+            
+            logger.info("CPU/GPU benchmark scores extracted successfully using benchmark scraper")
+            return df_with_benchmarks
+            
+        except ImportError as e:
+            logger.warning(f"Could not import benchmark scraper: {e}")
+            logger.info("Falling back to basic benchmark extraction...")
+            return self._add_basic_benchmarks(df_laptop)
+        except Exception as e:
+            logger.error(f"Error in benchmark scraper: {e}")
+            logger.info("Falling back to basic benchmark extraction...")
+            return self._add_basic_benchmarks(df_laptop)
+        except KeyboardInterrupt:
+            logger.warning("Benchmark processing interrupted by user")
+            logger.info("Falling back to basic benchmark extraction...")
+            return self._add_basic_benchmarks(df_laptop)
+    
+    def add_specifications(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add laptop specifications (RAM, storage, screen size, processor, GPU, etc.).
         
         Args:
             df_laptop (pd.DataFrame): Laptop dataframe
@@ -1208,54 +1258,7 @@ class LaptopDataPreprocessor:
         Returns:
             pd.DataFrame: Laptop dataframe with added specifications
         """
-        try:
-            from benchmark_scraper import BenchmarkScraper
-            
-            logger.info("Initializing benchmark scraper for specification extraction...")
-            scraper = BenchmarkScraper(preprocessor=self)
-            
-            # Extract specifications and benchmark scores in one step
-            # Note: This can take several minutes for large datasets
-            logger.info("Starting benchmark score extraction (this may take 2-5 minutes)...")
-            df_with_specs = scraper.add_benchmark_scores(df_laptop)
-            
-            # Replace benchmark scores of 0 with default values for unmatched CPU/GPU
-            if 'cpu_benchmark_score' in df_with_specs.columns:
-                df_with_specs['cpu_benchmark_score'] = df_with_specs['cpu_benchmark_score'].replace(0, 3000)
-            if 'gpu_benchmark_score' in df_with_specs.columns:
-                df_with_specs['gpu_benchmark_score'] = df_with_specs['gpu_benchmark_score'].replace(0, 500)
-            if 'total_benchmark_score' in df_with_specs.columns:
-                # For total score, replace 0 with default value only if both CPU and GPU are 0
-                mask = (df_with_specs['cpu_benchmark_score'] == 0) & (df_with_specs['gpu_benchmark_score'] == 0)
-                df_with_specs.loc[mask, 'total_benchmark_score'] = 3000 * 0.7 + 500 * 0.3  # Weighted combination
-            
-            logger.info("Specifications and benchmark scores extracted successfully using benchmark scraper")
-            return df_with_specs
-            
-        except ImportError as e:
-            logger.warning(f"Could not import benchmark scraper: {e}")
-            logger.info("Falling back to basic specification extraction...")
-            return self._add_basic_specifications(df_laptop)
-        except Exception as e:
-            logger.error(f"Error in benchmark scraper specification extraction: {e}")
-            logger.info("Falling back to basic specification extraction...")
-            return self._add_basic_specifications(df_laptop)
-        except KeyboardInterrupt:
-            logger.warning("Benchmark processing interrupted by user")
-            logger.info("Falling back to basic specification extraction...")
-            return self._add_basic_specifications(df_laptop)
-    
-    def _add_basic_specifications(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
-        """
-        Add basic CPU/GPU specifications using built-in extraction methods.
-        
-        Args:
-            df_laptop (pd.DataFrame): Laptop dataframe
-            
-        Returns:
-            pd.DataFrame: Laptop dataframe with added CPU/GPU specifications
-        """
-        logger.info("Adding basic CPU/GPU specifications using built-in methods...")
+        logger.info("Adding laptop specifications (RAM, storage, screen size, processor, GPU)...")
         
         df_specs = df_laptop.copy()
         
@@ -1282,25 +1285,114 @@ class LaptopDataPreprocessor:
             
             return ' '.join(text_parts)
         
-        # Extract CPU, GPU, and screen size specifications for each row
-        df_specs['processor_model'] = df_specs.apply(
-            lambda row: self._extract_processor_name_from_text(combine_text_columns(row)), axis=1
+        # Extract specifications for each row
+        logger.info("Extracting RAM specifications...")
+        df_specs['ram_gb'] = df_specs.apply(
+            lambda row: self._extract_ram_from_text(combine_text_columns(row)), axis=1
         )
         
-        df_specs['gpu_model'] = df_specs.apply(
-            lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
+        logger.info("Extracting storage specifications...")
+        df_specs['storage_gb'] = df_specs.apply(
+            lambda row: self._extract_storage_from_text(combine_text_columns(row)), axis=1
         )
         
+        logger.info("Extracting screen size specifications...")
         df_specs['screen_size_inches'] = df_specs.apply(
             lambda row: self._extract_screen_size_from_text(combine_text_columns(row)), axis=1
         )
         
-        logger.info("Basic CPU/GPU/Screen size specifications added successfully")
-        logger.info(f"Processor models found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
-        logger.info(f"GPU models found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
-        logger.info(f"Screen sizes found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
+        logger.info("Extracting processor specifications...")
+        df_specs['processor_model'] = df_specs.apply(
+            lambda row: self._extract_processor_name_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        logger.info("Extracting GPU specifications...")
+        df_specs['gpu_model'] = df_specs.apply(
+            lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        logger.info("Extracting storage type specifications...")
+        df_specs['storage_type'] = df_specs.apply(
+            lambda row: self._extract_storage_type_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        logger.info("Extracting RAM type specifications...")
+        df_specs['ram_type'] = df_specs.apply(
+            lambda row: self._extract_ram_type_from_text(combine_text_columns(row)), axis=1
+        )
+        
+        # Add performance tiers and gaming capability based on benchmark scores
+        if 'cpu_benchmark_score' in df_specs.columns and 'gpu_benchmark_score' in df_specs.columns:
+            logger.info("Adding performance tiers and gaming capability...")
+            df_specs['performance_tier'] = df_specs.apply(self._calculate_performance_tier, axis=1)
+            df_specs['gaming_capability'] = df_specs.apply(self._calculate_gaming_capability, axis=1)
+        
+        # Log extraction results
+        logger.info("Specification extraction completed:")
+        logger.info(f"  RAM found: {df_specs['ram_gb'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  Storage found: {df_specs['storage_gb'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  Screen size found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  Processor found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  GPU found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  Storage type found: {df_specs['storage_type'].notna().sum()}/{len(df_specs)} rows")
+        logger.info(f"  RAM type found: {df_specs['ram_type'].notna().sum()}/{len(df_specs)} rows")
+        
         return df_specs
-
+    
+    def _calculate_performance_tier(self, row) -> str:
+        """Calculate performance tier based on CPU and GPU benchmark scores."""
+        cpu_score = row.get('cpu_benchmark_score', 0)
+        gpu_score = row.get('gpu_benchmark_score', 0)
+        
+        if cpu_score >= 20000 and gpu_score >= 15000:
+            return 'Ultra High'
+        elif cpu_score >= 15000 and gpu_score >= 10000:
+            return 'High'
+        elif cpu_score >= 10000 and gpu_score >= 5000:
+            return 'Medium-High'
+        elif cpu_score >= 5000 and gpu_score >= 2000:
+            return 'Medium'
+        elif cpu_score >= 3000 and gpu_score >= 500:
+            return 'Low-Medium'
+        else:
+            return 'Low'
+    
+    def _calculate_gaming_capability(self, row) -> str:
+        """Calculate gaming capability based on GPU benchmark score."""
+        gpu_score = row.get('gpu_benchmark_score', 0)
+        
+        if gpu_score >= 15000:
+            return 'High-End Gaming'
+        elif gpu_score >= 10000:
+            return 'Mid-Range Gaming'
+        elif gpu_score >= 5000:
+            return 'Casual Gaming'
+        elif gpu_score >= 2000:
+            return 'Light Gaming'
+        else:
+            return 'Basic Graphics'
+    
+    def _add_basic_benchmarks(self, df_laptop: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add basic CPU/GPU benchmark scores using built-in methods.
+        
+        Args:
+            df_laptop (pd.DataFrame): Laptop dataframe
+            
+        Returns:
+            pd.DataFrame: Laptop dataframe with added benchmark scores
+        """
+        logger.info("Adding basic CPU/GPU benchmark scores using built-in methods...")
+        
+        df_benchmarks = df_laptop.copy()
+        
+        # Add default benchmark scores
+        df_benchmarks['cpu_benchmark_score'] = 3000  # Default CPU score
+        df_benchmarks['gpu_benchmark_score'] = 500   # Default GPU score
+        df_benchmarks['total_benchmark_score'] = 3000 * 0.7 + 500 * 0.3  # Weighted combination
+        
+        logger.info("Basic benchmark scores added successfully")
+        return df_benchmarks
 
     def get_separated_data_summary(self) -> Dict:
         """
@@ -1383,7 +1475,6 @@ class LaptopDataPreprocessor:
             'laptop_data': laptop_summary,
             'rating_data': rating_summary
         }
-
 
 def main():
     """
@@ -1472,7 +1563,6 @@ def main():
     except Exception as e:
         logger.error(f"Error in preprocessing pipeline: {e}")
         raise
-
 
 if __name__ == "__main__":
     main()

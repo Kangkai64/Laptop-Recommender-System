@@ -57,15 +57,18 @@ class RecommendationEvaluator:
     def _prepare_evaluation_data(self):
         """Prepare data structures for evaluation."""
         # Create user-item matrix for collaborative filtering evaluation
-        if 'user_id_encoded' in self.df_rating.columns and 'laptop_id' in self.df_rating.columns:
+        # Use 'asin' as the laptop identifier since that's what's in the rating data
+        if 'user_id_encoded' in self.df_rating.columns and 'asin' in self.df_rating.columns:
             self.user_item_matrix = self.df_rating.pivot_table(
                 index='user_id_encoded', 
-                columns='laptop_id', 
+                columns='asin', 
                 values='rating', 
                 fill_value=0
             )
+            logger.info(f"Created user-item matrix with shape: {self.user_item_matrix.shape}")
         else:
             logger.warning("Required columns not found for user-item matrix")
+            logger.warning(f"Available columns: {list(self.df_rating.columns)}")
             self.user_item_matrix = None
         
         # Create laptop feature matrix for content-based evaluation
@@ -131,7 +134,7 @@ class RecommendationEvaluator:
             for scenario in test_scenarios:
                 try:
                     # Get recommendations
-                    recommendations = recommender.get_content_based_recommendations(
+                    recommendations = recommender.get_recommendations_by_preferences(
                         scenario, n_recommendations
                     )
                     
@@ -186,7 +189,7 @@ class RecommendationEvaluator:
                 logger.warning("No user-item matrix available for collaborative evaluation")
                 return {'precision': 0.0, 'recall': 0.0, 'f1_score': 0.0, 'coverage': 0.0}
             
-            # Test with different users
+            # Test with different users - use actual user IDs from the data
             test_users = self.user_item_matrix.index[:min(50, len(self.user_item_matrix))]
             all_precisions = []
             all_recalls = []
@@ -203,7 +206,7 @@ class RecommendationEvaluator:
                         continue
                     
                     # Get recommendations for this user
-                    recommendations = recommender.get_collaborative_filtering_recommendations(
+                    recommendations = recommender.get_user_based_recommendations(
                         user_id=user_id, n_recommendations=n_recommendations
                     )
                     
@@ -273,7 +276,7 @@ class RecommendationEvaluator:
             for _, rating_row in test_sample.iterrows():
                 try:
                     user_id = rating_row.get('user_id_encoded', rating_row.get('user_id'))
-                    laptop_id = rating_row.get('laptop_id')
+                    laptop_id = rating_row.get('asin')  # Use 'asin' as the laptop identifier
                     actual_rating = rating_row.get('rating', rating_row.get('average_rating'))
                     
                     if pd.isna(user_id) or pd.isna(laptop_id) or pd.isna(actual_rating):
@@ -281,7 +284,7 @@ class RecommendationEvaluator:
                     
                     # Try to predict rating (this would need to be implemented in the recommender)
                     # For now, we'll use a simple heuristic based on laptop average rating
-                    laptop_data = self.df_laptop[self.df_laptop['laptop_id'] == laptop_id]
+                    laptop_data = self.df_laptop[self.df_laptop['asin'] == laptop_id]
                     if not laptop_data.empty:
                         predicted_rating = laptop_data.iloc[0].get('average_rating', 3.0)
                     else:
@@ -478,6 +481,34 @@ class RecommendationEvaluator:
             logger.warning(f"Error calculating system metrics: {e}")
             return {'error': str(e)}
     
+    def save_evaluation_results(self, filename: str = None) -> str:
+        """Save evaluation results to a JSON file in the results folder."""
+        import os
+        
+        # Create results directory if it doesn't exist
+        results_dir = "results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+        
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"evaluation_metrics_{timestamp}.json"
+        
+        # Ensure filename is in results directory
+        if not filename.startswith(results_dir):
+            filename = os.path.join(results_dir, filename)
+        
+        try:
+            with open(filename, 'w') as f:
+                json.dump(self.evaluation_results, f, indent=2, default=str)
+            
+            logger.info(f"Evaluation results saved to {filename}")
+            return filename
+            
+        except Exception as e:
+            logger.error(f"Error saving evaluation results: {e}")
+            return ""
+
     def generate_evaluation_report(self) -> str:
         """Generate a comprehensive evaluation report."""
         if not self.evaluation_results:

@@ -13,7 +13,6 @@ The script installs all dependencies and verifies the installation.
 import os
 import sys
 import subprocess
-import platform
 from pathlib import Path
 
 def check_python_version():
@@ -72,7 +71,6 @@ def test_imports():
         "pandas",
         "numpy", 
         "sklearn",
-        "mcp",
         "flask",
         "fastapi",
         "uvicorn"
@@ -131,37 +129,6 @@ def test_imports():
     print("ℹ️ Some optional modules may not be available, but core functionality should work")
     return True
 
-def create_mcp_config():
-    """Create MCP configuration file if it doesn't exist."""
-    print("\n⚙️ Setting up MCP configuration...")
-    config_path = Path("mcp_config.json")
-    
-    if config_path.exists():
-        print("✅ MCP configuration already exists")
-        return True
-    
-    config_content = {
-        "mcpServers": {
-            "laptop-recommender": {
-                "command": "python",
-                "args": ["laptop_recommender_mcp.py"],
-                "env": {
-                    "PYTHONPATH": "."
-                }
-            }
-        }
-    }
-    
-    try:
-        import json
-        with open(config_path, 'w') as f:
-            json.dump(config_content, f, indent=2)
-        print("✅ MCP configuration created")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to create MCP configuration: {e}")
-        return False
-
 def show_next_steps():
     """Show next steps for using the laptop recommender system."""
     print("\n🎯 Setup Complete!")
@@ -169,18 +136,15 @@ def show_next_steps():
     print("\n📖 Next Steps:")
     print("1. Run the Flask web application:")
     print("   python app.py")
-    print("\n2. Run the MCP server (optional):")
-    print("   python laptop_recommender_mcp.py")
-    print("\n3. Test the recommendation system:")
+    print("\n2. Test the recommendation system:")
     print("   python demo_recommender_system.py")
     print("   python demo_evaluation_system.py")
-    print("\n4. Available components:")
+    print("\n3. Available components:")
     print("   - Web Application: Interactive web interface")
     print("   - Collaborative Filtering: User-based recommendations")
     print("   - Content-Based Filtering: Feature-based recommendations")
-    print("   - MCP Server: AI assistant integration")
     print("   - Evaluation System: Performance testing")
-    print("\n5. Web interface features:")
+    print("\n4. Web interface features:")
     print("   - Browse and search laptops")
     print("   - Get personalized recommendations")
     print("   - Compare laptops side-by-side")
@@ -208,10 +172,6 @@ def main():
     if not test_imports():
         print("\n❌ Setup failed. Some modules could not be imported.")
         sys.exit(1)
-    
-    # Create MCP configuration
-    if not create_mcp_config():
-        print("\n⚠️ Warning: MCP configuration could not be created.")
     
     # Show next steps
     show_next_steps()
