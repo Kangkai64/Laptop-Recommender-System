@@ -440,17 +440,31 @@ class LaptopRecommenderSystem:
             combined_recs[asin]['methods'].append('collaborative')
             combined_recs[asin]['scores']['collaborative'] = normalized_score
         
-        # Sort by combined score and get top recommendations
-        # Apply soft preference bonus before sorting
-        def preference_bonus(rec: Dict) -> float:
-            bonus = 0.0
-            try:
-                # Access to preferences via closure is not available; infer from available fields if present later
-                return bonus
-            except Exception:
-                return 0.0
+        # Normalize per-algorithm scores to [0,1] to prevent scale domination
+        try:
+            cb_scores = [v['scores'].get('content_based', None) for v in combined_recs.values()]
+            cf_scores = [v['scores'].get('collaborative', None) for v in combined_recs.values()]
+            def norm(values):
+                nums = [x for x in values if x is not None]
+                if not nums:
+                    return lambda x: 0.0
+                vmin, vmax = min(nums), max(nums)
+                if vmax == vmin:
+                    return lambda x: 1.0 if x is not None else 0.0
+                return lambda x: (x - vmin) / (vmax - vmin) if x is not None else 0.0
+            n_cb = norm(cb_scores)
+            n_cf = norm(cf_scores)
+            for asin, rec in combined_recs.items():
+                rec['combined_score'] = (
+                    weights['content_based'] * n_cb(rec['scores'].get('content_based')) +
+                    weights['collaborative'] * n_cf(rec['scores'].get('collaborative'))
+                )
+        except Exception:
+            # Fallback: keep unnormalized combined_score
+            pass
 
-        sorted_recs = sorted(combined_recs.values(), key=lambda x: (x['combined_score'] + preference_bonus(x)), reverse=True)
+        # Sort by combined score and get top recommendations
+        sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
         top_recs = sorted_recs[:n_recommendations]
         
         # Format final recommendations
