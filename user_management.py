@@ -603,7 +603,7 @@ class UserManager:
                 })
             return ratings
     
-    def get_enhanced_user_views(self, user_id: str, limit: int = 50) -> List[ViewedProduct]:
+    def get_enhanced_user_views(self, user_id: str, limit: int = 50, recommender_system=None, df_laptop=None) -> List[ViewedProduct]:
         """Get user's view history with enhanced laptop details."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -620,7 +620,7 @@ class UserManager:
                 laptop_id = row[0]
                 
                 # Try to get laptop details from the main database
-                laptop_details = self._get_laptop_details(laptop_id)
+                laptop_details = self._get_laptop_details_with_context(laptop_id, recommender_system, df_laptop)
                 
                 viewed_product = ViewedProduct(
                     laptop_id=laptop_id,
@@ -637,7 +637,7 @@ class UserManager:
             
             return views
     
-    def get_enhanced_user_ratings(self, user_id: str, limit: int = 50) -> List[UserRating]:
+    def get_enhanced_user_ratings(self, user_id: str, limit: int = 50, recommender_system=None, df_laptop=None) -> List[UserRating]:
         """Get user's rating history with enhanced laptop details."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -654,7 +654,7 @@ class UserManager:
                 laptop_id = row[0]
                 
                 # Try to get laptop details from the main database
-                laptop_details = self._get_laptop_details(laptop_id)
+                laptop_details = self._get_laptop_details_with_context(laptop_id, recommender_system, df_laptop)
                 
                 user_rating = UserRating(
                     laptop_id=laptop_id,
@@ -713,35 +713,127 @@ class UserManager:
             recent_activity=behavior_objects
         )
     
-    def _get_laptop_details(self, laptop_id: int) -> Dict:
+    def _get_laptop_details(self, laptop_id) -> Dict:
         """Helper method to get laptop details from the main database."""
         try:
-            # Try to get laptop details from the main laptops database
-            import sqlite3
-            main_db_path = "data/laptops.db"  # Adjust path as needed
+            # Convert laptop_id to int if it's bytes or other type
+            if isinstance(laptop_id, bytes):
+                # Convert bytes to int (assuming little-endian 8-byte integer)
+                laptop_id = int.from_bytes(laptop_id, byteorder='little')
+            elif not isinstance(laptop_id, int):
+                laptop_id = int(laptop_id)
             
-            if os.path.exists(main_db_path):
-                with sqlite3.connect(main_db_path) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        SELECT title_y, brand, price_myr, average_rating, image
-                        FROM laptops 
-                        WHERE id = ?
-                    ''', (laptop_id,))
-                    
-                    result = cursor.fetchone()
-                    if result:
+            # Try to get laptop details from the recommender system first
+            import sys
+            if 'app' in sys.modules:
+                app_module = sys.modules['app']
+                if hasattr(app_module, 'recommender_system') and app_module.recommender_system:
+                    laptop = app_module.recommender_system.get_laptop_by_id(laptop_id)
+                    if laptop:
                         return {
-                            'title_y': result[0],
-                            'brand': result[1],
-                            'price_myr': result[2],
-                            'average_rating': result[3],
-                            'image': result[4]
+                            'title_y': laptop.get('title_y'),
+                            'brand': laptop.get('brand'),
+                            'price_myr': laptop.get('price_myr'),
+                            'average_rating': laptop.get('average_rating'),
+                            'image': laptop.get('image', {}).get('hi_res', [None])[0] if laptop.get('image') else None
                         }
+            
+            # Fallback: Try to get laptop details from the global df_laptop DataFrame
+            if 'app' in sys.modules:
+                app_module = sys.modules['app']
+                if hasattr(app_module, 'df_laptop') and app_module.df_laptop is not None:
+                    df_laptop = app_module.df_laptop
+                    
+                    # Find the laptop with matching laptop_id
+                    laptop_row = df_laptop[df_laptop['laptop_id'] == laptop_id]
+                    if not laptop_row.empty:
+                        laptop_data = laptop_row.iloc[0]
+                        return {
+                            'title_y': laptop_data.get('title_y'),
+                            'brand': laptop_data.get('brand'),
+                            'price_myr': laptop_data.get('price_myr'),
+                            'average_rating': laptop_data.get('average_rating'),
+                            'image': laptop_data.get('images_y')
+                        }
+            
+            logger.warning(f"Could not find laptop details for laptop_id {laptop_id}")
         except Exception as e:
             logger.warning(f"Could not fetch laptop details for {laptop_id}: {e}")
         
         return {}
+    
+    def _get_laptop_details_with_context(self, laptop_id, recommender_system=None, df_laptop=None) -> Dict:
+        """Helper method to get laptop details with explicit context."""
+        try:
+            # Convert laptop_id to int if it's bytes or other type
+            if isinstance(laptop_id, bytes):
+                # Convert bytes to int (assuming little-endian 8-byte integer)
+                laptop_id = int.from_bytes(laptop_id, byteorder='little')
+            elif not isinstance(laptop_id, int):
+                laptop_id = int(laptop_id)
+            
+            # Try to get laptop details from the recommender system first
+            if recommender_system:
+                laptop = recommender_system.get_laptop_by_id(laptop_id)
+                if laptop:
+                    return {
+                        'title_y': laptop.get('title_y'),
+                        'brand': laptop.get('brand'),
+                        'price_myr': laptop.get('price_myr'),
+                        'average_rating': laptop.get('average_rating'),
+                        'image': laptop.get('image', {}).get('hi_res', [None])[0] if laptop.get('image') else None
+                    }
+            
+            # Fallback: Try to get laptop details from the df_laptop DataFrame
+            if df_laptop is not None:
+                # Find the laptop with matching laptop_id
+                laptop_row = df_laptop[df_laptop['laptop_id'] == laptop_id]
+                if not laptop_row.empty:
+                    laptop_data = laptop_row.iloc[0]
+                    return {
+                        'title_y': laptop_data.get('title_y'),
+                        'brand': laptop_data.get('brand'),
+                        'price_myr': laptop_data.get('price_myr'),
+                        'average_rating': laptop_data.get('average_rating'),
+                        'image': laptop_data.get('images_y')
+                    }
+
+                # If not found by numeric ID, attempt recovery using ASIN if present
+                # This handles cases where IDs drifted between sessions
+                if 'asin' in df_laptop.columns and isinstance(laptop_id, str) and len(laptop_id) >= 8:
+                    asin_row = df_laptop[df_laptop['asin'] == laptop_id]
+                    if not asin_row.empty:
+                        laptop_data = asin_row.iloc[0]
+                        return {
+                            'title_y': laptop_data.get('title_y'),
+                            'brand': laptop_data.get('brand'),
+                            'price_myr': laptop_data.get('price_myr'),
+                            'average_rating': laptop_data.get('average_rating'),
+                            'image': laptop_data.get('images_y')
+                        }
+            
+            logger.warning(f"Could not find laptop details for laptop_id {laptop_id}")
+        except Exception as e:
+            logger.warning(f"Could not fetch laptop details for {laptop_id}: {e}")
+        
+        return {}
+    
+    def _get_laptop_id_from_asin(self, asin: str, df_laptop: Optional[pd.DataFrame] = None) -> Optional[int]:
+        """Helper method to map ASIN to local laptop_id."""
+        try:
+            if df_laptop is not None:
+                # Find the laptop with matching ASIN
+                laptop_row = df_laptop[df_laptop['asin'] == asin]
+                if not laptop_row.empty:
+                    laptop_id = laptop_row.iloc[0]['laptop_id']
+                    # Ensure it's a Python int, not numpy int or other type
+                    return int(laptop_id)
+            
+            logger.warning(f"Could not find laptop_id for ASIN {asin} - df_laptop not provided")
+        except Exception as e:
+            logger.warning(f"Could not map ASIN {asin} to laptop_id: {e}")
+        
+        return None
     
     def get_user_behavior_history(self, user_id: str, behavior_type: Optional[str] = None, 
                                  limit: int = 100) -> List[Dict]:
@@ -989,16 +1081,60 @@ class UserManager:
             logger.warning(f"SQL client failed for user stats: {e}")
             return {}
     
-    def create_user_from_existing(self, user_id_encoded: str, username: Optional[str] = None, df_rating: Optional[pd.DataFrame] = None) -> UserProfile:
+    def create_user_from_existing(self, user_id_encoded: str, username: Optional[str] = None, df_rating: Optional[pd.DataFrame] = None, df_laptop: Optional[pd.DataFrame] = None) -> UserProfile:
         """Create a new user profile from an existing user in the rating dataset."""
         if username is None:
             username = f"User_{user_id_encoded}"
         
+        # Load laptop data if not provided - do this FIRST before any user operations
+        logger.info(f"df_laptop parameter: {df_laptop is not None}")
+        if df_laptop is None:
+            logger.info("df_laptop is None, attempting to load...")
+            try:
+                # Try to get df_laptop from the global app context
+                import sys
+                if 'app' in sys.modules:
+                    app_module = sys.modules['app']
+                    if hasattr(app_module, 'df_laptop') and app_module.df_laptop is not None:
+                        df_laptop = app_module.df_laptop
+                        logger.info("Using df_laptop from app module")
+                    else:
+                        logger.info("App module df_laptop not available, loading from preprocessor...")
+                        # Load laptop data directly
+                        from data_preprocessing import LaptopDataPreprocessor
+                        preprocessor = LaptopDataPreprocessor()
+                        df_laptop, _ = preprocessor.preprocess_separated_pipeline(force_reprocess=False)
+                        logger.info(f"Loaded df_laptop from preprocessor: shape={df_laptop.shape}")
+                else:
+                    logger.info("App module not available, loading from preprocessor...")
+                    # Load laptop data directly
+                    from data_preprocessing import LaptopDataPreprocessor
+                    preprocessor = LaptopDataPreprocessor()
+                    df_laptop, _ = preprocessor.preprocess_separated_pipeline(force_reprocess=False)
+                    logger.info(f"Loaded df_laptop from preprocessor: shape={df_laptop.shape}")
+            except Exception as e:
+                logger.warning(f"Could not load df_laptop: {e}")
+                import traceback
+                logger.warning(f"Full traceback: {traceback.format_exc()}")
+        else:
+            logger.info("df_laptop was provided as parameter")
+        
+        logger.info(f"df_laptop available: {df_laptop is not None}, shape: {df_laptop.shape if df_laptop is not None else 'N/A'}")
+        
         # Check if user already exists
         existing_user = self.get_user_by_username(username)
         if existing_user:
-            # Recalculate stats for existing user
-            self.recalculate_user_stats(existing_user.user_id)
+            # Force re-sync of Amazon data for existing user
+            logger.info(f"User {username} already exists, re-syncing Amazon data...")
+            sync_success = self.sync_amazon_data_to_local_db(existing_user.user_id, user_id_encoded, df_laptop)
+            if not sync_success:
+                logger.warning(f"Failed to re-sync Amazon data for existing user {existing_user.user_id}")
+            
+            # Recalculate stats for existing user based on actual local database data
+            actual_stats = self.recalculate_user_stats(existing_user.user_id)
+            existing_user.total_ratings = actual_stats['total_ratings']
+            existing_user.total_views = actual_stats['total_views']
+            existing_user.total_comments = actual_stats['total_comments']
             return existing_user
         
         # Create new user
@@ -1006,6 +1142,17 @@ class UserManager:
         
         # Sync stats from Amazon data
         amazon_stats = self.sync_user_stats_from_amazon_data(user_id_encoded)
+        
+        # Sync actual data from Amazon dataset to local database
+        sync_success = self.sync_amazon_data_to_local_db(user_profile.user_id, user_id_encoded, df_laptop)
+        if not sync_success:
+            logger.warning(f"Failed to sync Amazon data to local database for user {user_profile.user_id}")
+        
+        # Recalculate stats based on actual local database data
+        actual_stats = self.recalculate_user_stats(user_profile.user_id)
+        user_profile.total_ratings = actual_stats['total_ratings']
+        user_profile.total_views = actual_stats['total_views']
+        user_profile.total_comments = actual_stats['total_comments']
         
         # Extract comments from df_rating if available
         user_comments = []
@@ -1075,6 +1222,96 @@ class UserManager:
             logger.warning(f"Failed to sync stats from Amazon data: {e}")
             return {'total_ratings': 0, 'total_comments': 0, 'total_views': 0}
     
+    def sync_amazon_data_to_local_db(self, user_id: str, user_id_encoded: str, df_laptop: Optional[pd.DataFrame] = None) -> bool:
+        """
+        Sync actual Amazon dataset data (ratings, comments) to local database tables.
+        
+        Args:
+            user_id: The local user ID
+            user_id_encoded: The encoded user ID from Amazon dataset
+            
+        Returns:
+            bool: True if sync was successful
+        """
+        try:
+            from huggingface_sql_client import create_hf_sql_client
+            
+            hf_client = create_hf_sql_client()
+            
+            # Get user's ratings from Amazon dataset
+            amazon_ratings = hf_client.get_user_ratings(user_id_encoded, limit=1000)
+            
+            logger.info(f"Syncing {len(amazon_ratings)} ratings from Amazon dataset for user {user_id}")
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Clear existing data for this user
+                cursor.execute('DELETE FROM user_ratings WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM user_views WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM user_behavior WHERE user_id = ?', (user_id,))
+                
+                # Insert ratings and create corresponding views and behavior records
+                for rating in amazon_ratings:
+                    asin = rating['laptop_id']  # This is actually the ASIN from Amazon dataset
+                    rating_value = rating['rating']
+                    comment = rating['comment']
+                    timestamp = rating['timestamp']
+                    
+                    # Map ASIN to local laptop_id
+                    # Use HuggingFace laptop dataset for mapping (has all ASINs)
+                    laptop_id = self._get_laptop_id_from_asin(asin, hf_client.df_laptop)
+                    logger.info(f"Processing rating: ASIN={asin}, laptop_id={laptop_id}, rating={rating_value}")
+                    if laptop_id is None:
+                        logger.warning(f"Could not find laptop_id for ASIN {asin}, skipping rating")
+                        continue
+                    
+                    # Insert rating
+                    cursor.execute('''
+                        INSERT INTO user_ratings (user_id, laptop_id, rating, comment, timestamp)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (user_id, laptop_id, rating_value, comment, timestamp))
+                    
+                    # Create a view record (since Amazon data doesn't track views, we'll create one per rating)
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO user_views (user_id, laptop_id, view_count, first_viewed, last_viewed)
+                        VALUES (?, ?, 1, ?, ?)
+                    ''', (user_id, laptop_id, timestamp, timestamp))
+                    
+                    # Create behavior record for rating
+                    behavior_data = json.dumps({
+                        'rating': rating_value,
+                        'comment': comment if comment else None
+                    })
+                    cursor.execute('''
+                        INSERT INTO user_behavior (user_id, laptop_id, behavior_type, timestamp, data)
+                        VALUES (?, ?, 'rating', ?, ?)
+                    ''', (user_id, laptop_id, timestamp, behavior_data))
+                    
+                    # Also create a synthesized view behavior for parity with local tracking
+                    view_data = json.dumps({'source': 'amazon_synthesized'})
+                    cursor.execute('''
+                        INSERT INTO user_behavior (user_id, laptop_id, behavior_type, timestamp, data)
+                        VALUES (?, ?, 'view', ?, ?)
+                    ''', (user_id, laptop_id, timestamp, view_data))
+
+                    # If there's a comment, also create a comment behavior record
+                    if comment and len(comment.strip()) > 0:
+                        comment_data = json.dumps({'comment': comment})
+                        cursor.execute('''
+                            INSERT INTO user_behavior (user_id, laptop_id, behavior_type, timestamp, data)
+                            VALUES (?, ?, 'comment', ?, ?)
+                        ''', (user_id, laptop_id, timestamp, comment_data))
+                
+                conn.commit()
+                
+            logger.info(f"Successfully synced Amazon data to local database for user {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to sync Amazon data to local database for user {user_id}: {e}")
+            return False
+    
     def recalculate_user_stats(self, user_id: str) -> Dict[str, int]:
         """
         Recalculate user statistics from the behavior tables.
@@ -1103,6 +1340,7 @@ class UserManager:
                     actual_views = actual_ratings  # Use ratings count as views for consistency
                     
                     logger.info(f"Using Amazon dataset stats for user {user_id}: ratings={actual_ratings}, comments={actual_comments}, views={actual_views}")
+                    logger.info(f"Amazon stats source: {amazon_stats}")
                     
                     # Update the local user table with Amazon stats
                     with sqlite3.connect(self.db_path) as conn:

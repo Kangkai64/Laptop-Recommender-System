@@ -1616,6 +1616,7 @@ def main():
         # Display column categories
         if 'column_categories' in summary['laptop_data']:
             print("\n  Column Categories:")
+           
             categories = summary['laptop_data']['column_categories']
             for category, cols in categories.items():
                 if cols:
