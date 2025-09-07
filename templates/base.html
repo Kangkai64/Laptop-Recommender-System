@@ -575,13 +575,6 @@
             });
             html += '</tr>';
             
-            // Operating System
-            html += '<tr><td><strong><i class="fas fa-laptop me-2"></i>Operating System</strong></td>';
-            compareList.forEach(laptop => {
-                html += `<td>${laptop.os || 'Unknown'}</td>`;
-            });
-            html += '</tr>';
-            
             // Processor
             html += '<tr><td><strong><i class="fas fa-microchip me-2"></i>Processor</strong></td>';
             compareList.forEach(laptop => {
@@ -589,7 +582,9 @@
             });
             html += '</tr>';
             
-            // CPU Performance
+            // CPU Performance (with percentage)
+            // Find the minimum CPU benchmark in the compareList
+            let minCpuScore = Math.min(...compareList.map(l => l.cpuBenchmark || 0));
             html += '<tr><td><strong><i class="fas fa-tachometer-alt me-2"></i>CPU Performance</strong></td>';
             compareList.forEach(laptop => {
                 const cpuScore = laptop.cpuBenchmark || 0;
@@ -597,7 +592,9 @@
                 let label = 'Standard';
                 if (cpuScore >= 15000) { badgeClass = 'bg-success'; label = 'High Performance'; }
                 else if (cpuScore >= 10000) { badgeClass = 'bg-warning'; label = 'Good Performance'; }
-                html += `<td>${cpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+                // Calculate percentage compared to slowest
+                let percent = minCpuScore > 0 ? ((cpuScore / minCpuScore) * 100).toFixed(0) : 'N/A';
+                html += `<td>${cpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span><br><small>(${percent}% of slowest)</small></td>`;
             });
             html += '</tr>';
             
@@ -608,7 +605,9 @@
             });
             html += '</tr>';
             
-            // GPU Performance
+            // GPU Performance (with percentage)
+            // Find the minimum GPU benchmark in the compareList
+            let minGpuScore = Math.min(...compareList.map(l => l.gpuBenchmark || 0));
             html += '<tr><td><strong><i class="fas fa-gamepad me-2"></i>GPU Performance</strong></td>';
             compareList.forEach(laptop => {
                 const gpuScore = laptop.gpuBenchmark || 0;
@@ -616,7 +615,9 @@
                 let label = 'Basic Graphics';
                 if (gpuScore >= 8000) { badgeClass = 'bg-success'; label = 'Gaming Ready'; }
                 else if (gpuScore >= 5000) { badgeClass = 'bg-warning'; label = 'Light Gaming'; }
-                html += `<td>${gpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span></td>`;
+                // Calculate percentage compared to slowest
+                let percent = minGpuScore > 0 ? ((gpuScore / minGpuScore) * 100).toFixed(0) : 'N/A';
+                html += `<td>${gpuScore} points <span class="badge ${badgeClass} ms-1">${label}</span><br><small>(${percent}% of slowest)</small></td>`;
             });
             html += '</tr>';
             

@@ -739,7 +739,6 @@ class BenchmarkScraper:
             'match_type': 'actual_function'
         }
     
-
     def add_benchmark_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Add CPU and GPU benchmark scores and specifications to the dataframe.
@@ -881,10 +880,9 @@ class BenchmarkScraper:
                 lambda row: self._extract_gpu_name_from_text(combine_text_columns(row)), axis=1
             )
         
-        logger.info("CPU/GPU/Screen size specifications extracted successfully")
+        logger.info("CPU/GPU specifications extracted successfully")
         logger.info(f"Processor models found: {df_specs['processor_model'].notna().sum()}/{len(df_specs)} rows")
         logger.info(f"GPU models found: {df_specs['gpu_model'].notna().sum()}/{len(df_specs)} rows")
-        logger.info(f"Screen sizes found: {df_specs['screen_size_inches'].notna().sum()}/{len(df_specs)} rows")
         
         return df_specs
     
