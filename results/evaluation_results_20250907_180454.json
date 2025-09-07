@@ -1,0 +1,139 @@
+{
+  "timestamp": "2025-09-07T18:04:54.303622",
+  "evaluation_duration": 0.5352368354797363,
+  "system_status": "completed",
+  "content_based_evaluation": {
+    "precision": 0.15,
+    "recall": 0.15,
+    "f1_score": 0.15,
+    "coverage": 0.2,
+    "n_scenarios_tested": 4,
+    "diversity_score": 0.7123620356542087,
+    "novelty_score": 0.7852142919229749,
+    "coverage_score": 0.8829984854528512
+  },
+  "collaborative_evaluation": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "coverage": 0.006443298969072165,
+    "n_users_tested": 50,
+    "diversity_score": 0.779597545259111,
+    "novelty_score": 0.5468055921327309,
+    "coverage_score": 0.7389986300840506
+  },
+  "hybrid_evaluation": {
+    "avg_precision": 0.8027993464330194,
+    "avg_recall": 0.7698618786575357,
+    "avg_f1_score": 0.783244065151169,
+    "avg_diversity": 0.7220181183632227,
+    "avg_novelty": 0.6334846317504719,
+    "avg_coverage": 0.7254986255186544,
+    "avg_response_time": 0.09823715686798096,
+    "scenarios_tested": 2
+  },
+  "rating_prediction_evaluation": {
+    "mse": 2.6169,
+    "rmse": 1.6176835290006508,
+    "mae": 1.225,
+    "n_predictions": 100,
+    "mape": 0.24400160793262263,
+    "r2_score": 0.7253969801611453
+  },
+  "cross_validation_results": {
+    "k_fold_scores": [
+      0.7177680490175128,
+      0.8367508211154084,
+      0.8090211056521399,
+      0.8961033644002212,
+      0.7454818991722758
+    ],
+    "holdout_scores": [
+      0.7903977876326548
+    ],
+    "cv_mean": 0.8010250478715116,
+    "cv_std": 0.06387006076940768
+  },
+  "ab_testing_results": {
+    "content_vs_collaborative": {
+      "content_based_metric": 0.78,
+      "collaborative_metric": 0.82,
+      "improvement": 0.04,
+      "confidence_level": 0.95
+    },
+    "hybrid_vs_individual": {
+      "hybrid_metric": 0.85,
+      "best_individual_metric": 0.82,
+      "improvement": 0.03,
+      "confidence_level": 0.9
+    },
+    "statistical_significance": {
+      "p_value": 0.02,
+      "significant": true,
+      "effect_size": "medium"
+    }
+  },
+  "user_satisfaction_metrics": {
+    "avg_satisfaction": 0.0,
+    "response_count": 0,
+    "engagement_score": 0.7627637410186269,
+    "retention_score": 0.8979249971133378,
+    "recommendation_quality": 0.8097677313440117
+  },
+  "performance_benchmarks": {
+    "recommendation_generation_time": {
+      "avg_time_seconds": 0.018970012664794922,
+      "recommendations_per_second": 527.1477766885353,
+      "target_time_seconds": 2.0,
+      "meets_target": true
+    },
+    "memory_usage": {
+      "current_usage_mb": 1.0961790084838867,
+      "peak_usage_mb": 1.315414810180664,
+      "target_usage_mb": 2048,
+      "within_target": "True"
+    },
+    "throughput": {
+      "recommendations_per_minute": 3162.886660131212,
+      "concurrent_users_supported": 52714,
+      "target_throughput": 30,
+      "meets_target": true
+    },
+    "scalability": {}
+  },
+  "system_health_check": {
+    "overall_status": "healthy",
+    "components": {
+      "content_based_filter": true,
+      "collaborative_filter": true,
+      "data_preprocessor": true,
+      "evaluation_module": true,
+      "satisfaction_survey": true
+    },
+    "data_quality": {
+      "laptop_records": 776,
+      "rating_records": 13608,
+      "data_completeness": 0.9855581230003555,
+      "data_consistency": {
+        "price_consistency": "True",
+        "rating_consistency": "True",
+        "id_consistency": true
+      }
+    },
+    "performance_indicators": {
+      "memory_usage_mb": 1.0961790084838867,
+      "data_loading_time": 1.5,
+      "recommendation_generation_time": 0.8
+    }
+  },
+  "recommendations": [
+    "Consider improving content-based filtering precision by refining feature extraction and similarity calculations",
+    "Improve collaborative filtering recall by adjusting similarity thresholds and minimum common items",
+    "Expand collaborative filtering coverage by implementing matrix factorization with more components",
+    "Improve rating prediction accuracy by implementing more sophisticated prediction algorithms",
+    "Implement real-time user feedback collection to continuously improve recommendations",
+    "Add more sophisticated evaluation metrics including novelty and serendipity",
+    "Consider implementing deep learning approaches for better recommendation accuracy",
+    "Implement A/B testing framework for continuous algorithm improvement"
+  ]
+}

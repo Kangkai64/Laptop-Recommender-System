@@ -86,9 +86,72 @@ class ContentBasedFiltering:
             else:
                 self.config[section] = params
     
+    def _try_load_saved_model(self) -> bool:
+        """Try to load a pre-trained model from the models directory (joblib preferred)."""
+        try:
+            import os
+            from joblib import load as joblib_load
+            import pickle
+
+            # Prefer joblib artifact if available
+            joblib_path = 'models/content_based_model.pkl'
+            if os.path.exists(joblib_path):
+                try:
+                    model_data = joblib_load(joblib_path)
+                    # Support both new and legacy keys
+                    self.feature_matrix = model_data.get('feature_matrix') or model_data.get('laptop_features')
+                    self.similarity_matrix = model_data.get('similarity_matrix')
+                    self.feature_names = model_data.get('feature_names') or model_data.get('features_used')
+                    self.tfidf_vectorizer = model_data.get('tfidf_vectorizer')
+                    self.scaler = model_data.get('scaler')
+                    self.config = model_data.get('config', self.config)
+                    if self.feature_matrix is not None and self.similarity_matrix is not None:
+                        logger.info(f"Loaded trained content-based model (joblib): {joblib_path}")
+                        return True
+                except Exception:
+                    # Fall back to pickle if joblib load fails
+                    pass
+
+            # Legacy pickle location/name support
+            legacy_paths = [
+                'models/content_based_model.pkl',
+                'models/content_based/content_based_model.pkl'
+            ]
+            for legacy_path in legacy_paths:
+                if os.path.exists(legacy_path):
+                    try:
+                        with open(legacy_path, 'rb') as f:
+                            model_data = pickle.load(f)
+                        self.feature_matrix = model_data.get('feature_matrix') or model_data.get('laptop_features')
+                        self.similarity_matrix = model_data.get('similarity_matrix')
+                        self.feature_names = model_data.get('feature_names') or model_data.get('features_used')
+                        self.tfidf_vectorizer = model_data.get('tfidf_vectorizer')
+                        self.scaler = model_data.get('scaler')
+                        self.config = model_data.get('config', self.config)
+                        if self.feature_matrix is not None and self.similarity_matrix is not None:
+                            logger.info(f"Loaded trained content-based model (pickle): {legacy_path}")
+                            return True
+                    except Exception:
+                        continue
+
+            logger.info("No trained content-based model found; will build from data")
+            return False
+
+        except Exception as e:
+            logger.warning(f"Failed to load pre-trained content-based model: {e}; will train new model")
+            return False
+    
     def create_feature_matrix(self) -> np.ndarray:
         """Create comprehensive feature matrix combining all laptop features."""
         logger.info("Creating feature matrix...")
+        
+        # Check if we can load a pre-trained model first
+        if self._try_load_saved_model():
+            logger.info("Using pre-trained content-based model")
+            if self.feature_matrix is not None:
+                return self.feature_matrix
+            else:
+                logger.warning("Saved model loaded but feature_matrix is None, falling back to training")
         
         try:
             # Get available text features for TF-IDF
@@ -111,15 +174,8 @@ class ContentBasedFiltering:
                 for feature in available_text_features[1:]:
                     text_features = text_features + ' ' + feature.astype(str)
                 
-                # TF-IDF vectorization for text with more restrictive parameters
+                # TF-IDF vectorization honoring configured params (no forced overrides)
                 tfidf_params = self.config['tfidf_params'].copy()
-                tfidf_params.update({
-                    'max_features': 500,  # Reduce features to avoid overfitting
-                    'min_df': 3,  # Increase minimum document frequency
-                    'max_df': 0.8,  # Reduce maximum document frequency
-                    'ngram_range': (1, 1)  # Use only unigrams for better diversity
-                })
-                
                 self.tfidf_vectorizer = TfidfVectorizer(**tfidf_params)
                 text_vectors = self.tfidf_vectorizer.fit_transform(text_features)
             else:
@@ -286,6 +342,11 @@ class ContentBasedFiltering:
         """
         if self.feature_matrix is None:
             self.create_feature_matrix()
+        
+        # If we already have a similarity matrix from saved model, use it
+        if self.similarity_matrix is not None:
+            logger.info("Using pre-computed similarity matrix from saved model")
+            return self.similarity_matrix
         
         logger.info(f"Computing similarity matrix using {method} method...")
         
@@ -674,9 +735,15 @@ class ContentBasedFiltering:
                     ]
                     logger.info(f"Budget filtering applied: RM {budget_min} - RM {budget_max}, {len(filtered_df)} laptops remaining")
             
-            # If no laptops match budget, return empty list
+            # Soft preference alignment (no hard filters beyond budget). We'll compute bonuses later.
+            brand_pref = preferences.get('brand_preference')
+            proc_pref = preferences.get('processor_preference')
+            min_ram_val = preferences.get('min_ram')
+            min_storage_val = preferences.get('min_storage')
+
+            # If no laptops match filters, return empty list
             if len(filtered_df) == 0:
-                logger.warning("No laptops match the specified budget range")
+                logger.warning("No laptops match the specified filters")
                 return []
             
             # Create preference vector
@@ -688,15 +755,51 @@ class ContentBasedFiltering:
             
             similarities = cosine_similarity([preference_vector], filtered_feature_matrix)[0]
             
+            # Compute preference bonuses (soft re-scoring)
+            bonuses = np.zeros_like(similarities)
+            try:
+                for i, idx in enumerate(filtered_indices):
+                    row = filtered_df.loc[idx]
+                    bonus = 0.0
+                    # Brand exact match bonus
+                    if brand_pref and 'brand' in row and isinstance(row['brand'], str):
+                        if row['brand'].strip().lower() == str(brand_pref).strip().lower():
+                            bonus += 0.08
+                    # Processor contains bonus
+                    if proc_pref:
+                        if 'processor_model' in row and isinstance(row['processor_model'], str):
+                            if str(proc_pref).lower() in row['processor_model'].lower():
+                                bonus += 0.06
+                    # Spec compliance bonuses
+                    if min_ram_val and 'ram_gb' in row and pd.notna(row['ram_gb']):
+                        if float(row['ram_gb']) >= float(min_ram_val):
+                            bonus += 0.04
+                    if min_storage_val and 'storage_gb' in row and pd.notna(row['storage_gb']):
+                        if float(row['storage_gb']) >= float(min_storage_val):
+                            bonus += 0.04
+                    bonuses[i] = bonus
+            except Exception:
+                pass
+
+            # Apply bonuses multiplicatively and apply a minimum similarity threshold
+            adjusted_scores = similarities * (1.0 + bonuses)
+            min_sim = self.config.get('filtering_options', {}).get('min_similarity_threshold', 0.1)
+            valid_mask = adjusted_scores >= float(min_sim)
+            valid_indices = np.where(valid_mask)[0]
+            if valid_indices.size == 0:
+                top_candidate_indices = np.argsort(adjusted_scores)[::-1]
+            else:
+                top_candidate_indices = valid_indices[np.argsort(adjusted_scores[valid_indices])[::-1]]
+
             # Get top recommendations from filtered dataset
-            top_indices = np.argsort(similarities)[::-1][:n_recommendations]
+            top_indices = top_candidate_indices[:n_recommendations]
             
             recommendations = []
             for idx in top_indices:
                 laptop_data = filtered_df.iloc[idx]
                 
                 # Use the similarity score directly (already normalized in matrix)
-                normalized_similarity = similarities[idx]
+                normalized_similarity = adjusted_scores[idx]
                 
                 recommendations.append({
                     'laptop_id': laptop_data['laptop_id'],  # Add laptop_id as primary key

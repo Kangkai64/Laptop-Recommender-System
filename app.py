@@ -456,6 +456,8 @@ def recommend():
                         recommendations = recommender_system.collaborative_filter.get_enhanced_recommendations(
                             user_id=user_id, preferences=query, n_recommendations=50
                         )
+                        # Soft post-filter/rerank to respect preferences without changing CF core scores
+                        recommendations = soft_rerank_by_preferences(recommendations, query)
                         recommendations = process_recommendations(recommendations, 'enhanced_collaborative', user_id)
                     except Exception as e:
                         logger.warning(f"Enhanced collaborative filtering failed for user {user_id}: {e}")
@@ -463,12 +465,14 @@ def recommend():
                         recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
                             preferences=query, n_recommendations=50
                         )
+                        recommendations = soft_rerank_by_preferences(recommendations, query)
                         recommendations = process_recommendations(recommendations, 'popular_collaborative')
                 else:
                     # Use automatic popular recommendations for anonymous users
                     recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
                         preferences=query, n_recommendations=50
                     )
+                    recommendations = soft_rerank_by_preferences(recommendations, query)
                     recommendations = process_recommendations(recommendations, 'popular_collaborative')
                 
             elif algorithm == 'hybrid':
@@ -549,6 +553,50 @@ def recommend():
     return render_template('recommend.html', 
                          available_brands=available_brands,
                          saved_preferences=saved_preferences)
+
+def soft_rerank_by_preferences(recs: List[Dict], query: Dict) -> List[Dict]:
+    """Apply soft preference-based reranking to CF results without hard filtering."""
+    try:
+        brand_pref = str(query.get('brand_preference', '') or '').strip().lower()
+        proc_pref = str(query.get('processor_preference', '') or '').strip().lower()
+        min_ram = query.get('min_ram')
+        min_storage = query.get('min_storage')
+        budget_range = query.get('budget_range') or (0, float('inf'))
+        bmin, bmax = float(budget_range[0]), float(budget_range[1])
+
+        def score(rec: Dict) -> float:
+            s = float(rec.get('recommendation_score', 0))
+            # Budget soft gate: small penalty if outside
+            price = float(rec.get('price_myr', 0) or 0)
+            if price < bmin or price > bmax:
+                s *= 0.8
+            # Brand soft boost
+            brand = str(rec.get('brand', '') or '').strip().lower()
+            if brand_pref and brand == brand_pref:
+                s *= 1.08
+            # Processor soft boost if model available in title/features
+            if proc_pref:
+                title = str(rec.get('title', rec.get('title_y', '')) or '').lower()
+                features = str(rec.get('features', '') or '').lower()
+                if proc_pref in title or proc_pref in features:
+                    s *= 1.06
+            # Spec soft boosts
+            try:
+                if min_ram is not None and float(rec.get('ram_gb', 0) or 0) >= float(min_ram):
+                    s *= 1.04
+            except Exception:
+                pass
+            try:
+                if min_storage is not None and float(rec.get('storage_gb', 0) or 0) >= float(min_storage):
+                    s *= 1.04
+            except Exception:
+                pass
+            return s
+
+        reranked = sorted(recs, key=score, reverse=True)
+        return reranked
+    except Exception:
+        return recs
 
 @app.route('/api/recommend', methods=['POST'])
 def api_recommend():

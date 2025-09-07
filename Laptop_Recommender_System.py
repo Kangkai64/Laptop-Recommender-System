@@ -15,6 +15,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 import warnings
 from datetime import datetime
+import random
 
 # Import our recommendation algorithms
 from content_based_filtering import create_content_based_filtering
@@ -52,9 +53,13 @@ class LaptopRecommenderSystem:
             },
             'content_based': {
                 'tfidf_params': {
-                    'max_features': 1000,
+                    'max_features': 2000,
                     'stop_words': 'english',
-                    'ngram_range': (1, 2)
+                    'ngram_range': (1, 2),
+                    'min_df': 2,
+                    'max_df': 0.9,
+                    'use_idf': True,
+                    'smooth_idf': True
                 },
                 'similarity_methods': {
                     'text_weight': 0.6,
@@ -64,8 +69,9 @@ class LaptopRecommenderSystem:
             },
             'collaborative': {
                 'matrix_factorization': {
-                    'n_components': 50,
-                    'random_state': 42
+                    'n_components': 80,
+                    'random_state': 42,
+                    'max_iter': 300
                 },
                 'similarity_methods': {
                     'min_common_items': 2,
@@ -108,6 +114,11 @@ class LaptopRecommenderSystem:
             return self.df_laptop, self.df_rating
         
         logger.info("Loading and preprocessing data...")
+        # Deterministic seeding for reproducibility
+        try:
+            self._set_global_seed(self.config.get('collaborative', {}).get('matrix_factorization', {}).get('random_state', 42))
+        except Exception:
+            pass
         
         try:
             # Initialize preprocessor
@@ -123,6 +134,14 @@ class LaptopRecommenderSystem:
         except Exception as e:
             logger.error(f"Error loading and preprocessing data: {str(e)}")
             raise
+
+    def _set_global_seed(self, seed: int = 42) -> None:
+        """Set seeds for reproducibility across numpy, random, and sklearn where applicable."""
+        try:
+            np.random.seed(seed)
+            random.seed(seed)
+        except Exception:
+            pass
     
     def initialize_recommendation_engines(self) -> None:
         """Initialize both content-based and collaborative filtering engines."""
@@ -146,11 +165,67 @@ class LaptopRecommenderSystem:
                 self.config['collaborative']
             )
             
+            # Automatically load pre-trained models if available
+            logger.info("Loading pre-trained models...")
+            
+            # Load content-based model
+            try:
+                self.content_based_filter.create_feature_matrix()
+                logger.info("✅ Content-based model loaded successfully")
+                try:
+                    fm_shape = getattr(self.content_based_filter, 'feature_matrix', None)
+                    sm_shape = getattr(self.content_based_filter, 'similarity_matrix', None)
+                    if fm_shape is not None:
+                        logger.info(f"Content-based feature matrix shape: {self.content_based_filter.feature_matrix.shape}")
+                    if sm_shape is not None:
+                        logger.info(f"Content-based similarity matrix shape: {self.content_based_filter.similarity_matrix.shape}")
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"Could not load content-based model: {e}")
+            
+            # Load collaborative filtering model
+            try:
+                self.collaborative_filter.create_user_item_matrix()
+                logger.info("✅ Collaborative filtering model loaded successfully")
+                try:
+                    uim_shape = getattr(self.collaborative_filter, 'user_item_matrix', None)
+                    if uim_shape is not None:
+                        logger.info(f"Collaborative user-item matrix shape: {self.collaborative_filter.user_item_matrix.shape}")
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"Could not load collaborative filtering model: {e}")
+            
             logger.info("Recommendation engines initialized successfully")
+            
+            # Log unused/legacy model artifacts for cleanup visibility (no deletion)
+            try:
+                self._log_model_artifacts()
+            except Exception:
+                pass
             
         except Exception as e:
             logger.error(f"Error initializing recommendation engines: {str(e)}")
             raise
+
+    def _log_model_artifacts(self) -> None:
+        """Log present model files and highlight likely-unused artifacts."""
+        import os
+        models_dir = 'models'
+        if not os.path.isdir(models_dir):
+            return
+        try:
+            files = [f for f in os.listdir(models_dir) if f.endswith('.pkl')]
+            if not files:
+                return
+            logger.info(f"Model artifacts found in '{models_dir}': {files}")
+            expected = {'content_based_model.pkl', 'collaborative_model.pkl'}
+            unused = [f for f in files if f not in expected]
+            if unused:
+                logger.info(f"Unused or legacy model files detected (safe to ignore): {unused}")
+        except Exception as e:
+            logger.debug(f"Could not scan model artifacts: {e}")
     
     def get_content_based_recommendations(self, preferences: Dict, 
                                         n_recommendations: int = None) -> List[Dict]:
@@ -241,15 +316,12 @@ class LaptopRecommenderSystem:
     def get_hybrid_recommendations(self, user_id: str, preferences: Dict,
                                  n_recommendations: int = None,
                                  weights: Optional[Dict[str, float]] = None) -> List[Dict]:
-        """Get hybrid recommendations combining both approaches."""
+        """Get hybrid recommendations combining both approaches with dynamic weights."""
         if n_recommendations is None:
             n_recommendations = self.config['system']['max_recommendations']
         
         if weights is None:
-            weights = {
-                'content_based': self.config['hybrid']['content_based_weight'],
-                'collaborative': self.config['hybrid']['collaborative_weight']
-            }
+            weights = self._get_dynamic_hybrid_weights(preferences)
         
         try:
             logger.info(f"Generating hybrid recommendations for user {user_id}")
@@ -268,6 +340,26 @@ class LaptopRecommenderSystem:
         except Exception as e:
             logger.error(f"Error getting hybrid recommendations: {str(e)}")
             raise
+
+    def _get_dynamic_hybrid_weights(self, preferences: Dict) -> Dict[str, float]:
+        """Compute dynamic hybrid weights based on use_case/priority."""
+        default_cb = self.config['hybrid']['content_based_weight']
+        default_cf = self.config['hybrid']['collaborative_weight']
+        use_case = str(preferences.get('use_case', '')).lower()
+        priority = str(preferences.get('priority', '')).lower()
+
+        cb_w, cf_w = default_cb, default_cf
+        # Performance/professional queries rely more on specs/text
+        if priority in ['performance'] or use_case in ['professional', 'work', 'business']:
+            cb_w, cf_w = max(0.6, default_cb), min(0.4, default_cf)
+        # Brand-loyal or returning users with history could lean more on CF (kept simple here)
+        # else keep defaults
+
+        # Normalize to sum to 1.0
+        total = cb_w + cf_w
+        if total == 0:
+            return {'content_based': 0.5, 'collaborative': 0.5}
+        return {'content_based': cb_w / total, 'collaborative': cf_w / total}
     
     def get_hybrid_recommendations_auto(self, preferences: Dict,
                                       n_recommendations: int = None,
@@ -349,7 +441,16 @@ class LaptopRecommenderSystem:
             combined_recs[asin]['scores']['collaborative'] = normalized_score
         
         # Sort by combined score and get top recommendations
-        sorted_recs = sorted(combined_recs.values(), key=lambda x: x['combined_score'], reverse=True)
+        # Apply soft preference bonus before sorting
+        def preference_bonus(rec: Dict) -> float:
+            bonus = 0.0
+            try:
+                # Access to preferences via closure is not available; infer from available fields if present later
+                return bonus
+            except Exception:
+                return 0.0
+
+        sorted_recs = sorted(combined_recs.values(), key=lambda x: (x['combined_score'] + preference_bonus(x)), reverse=True)
         top_recs = sorted_recs[:n_recommendations]
         
         # Format final recommendations
@@ -373,7 +474,25 @@ class LaptopRecommenderSystem:
                 'explanation': f"Smart hybrid: matches your preferences + popular with similar users" if method == 'hybrid_auto' else f"Combined from {len(rec['methods'])} methods: {', '.join(rec['methods'])}"
             }
             formatted_recommendations.append(formatted_rec)
-        
+
+        # Reorder to place items similar to the top-1 after it (if similarity matrix available)
+        try:
+            if self.content_based_filter and getattr(self.content_based_filter, 'similarity_matrix', None) is not None:
+                sim_matrix = self.content_based_filter.similarity_matrix
+                # Map asin to index in df_laptop
+                asin_to_idx = {row['asin']: idx for idx, row in self.df_laptop[['asin']].reset_index().to_dict('index').items()}
+                # Find index of top-1
+                if formatted_recommendations:
+                    top_asin = formatted_recommendations[0]['asin']
+                    if top_asin in asin_to_idx:
+                        t_idx = asin_to_idx[top_asin]
+                        # Score others by similarity to top-1
+                        rest = formatted_recommendations[1:]
+                        rest_sorted = sorted(rest, key=lambda r: sim_matrix[t_idx][asin_to_idx.get(r['asin'], t_idx)] if asin_to_idx.get(r['asin']) is not None else 0.0, reverse=True)
+                        formatted_recommendations = [formatted_recommendations[0]] + rest_sorted
+        except Exception:
+            pass
+
         logger.info(f"Generated {len(formatted_recommendations)} {method} recommendations")
         return formatted_recommendations
 

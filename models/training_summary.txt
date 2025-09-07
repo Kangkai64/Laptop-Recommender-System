@@ -1,0 +1,40 @@
+
+# Laptop Recommender System - Training Summary
+
+## Training Date: 2025-09-07 17:50:46
+
+## Models Trained:
+1. **Content-Based Filtering Model**
+   - File: models/content_based_model.pkl
+   - Features: 19
+   - Similarity Matrix Shape: (776, 776)
+   - Reviewer Tier Weighting: Yes
+
+2. **Collaborative Filtering Models**
+   - Total Models: 4
+   - Best Model: KNN
+   - Best RMSE: -0.1149
+   - Parameter Tuning: Yes
+   - Reviewer Tier Weighting: Yes
+
+## Dataset Information:
+- Laptops: 776
+- Ratings: 13446
+- Users: 13292
+- Average Rating: 4.07
+- Price Range: RM -1.65 - RM 2.81
+
+## Reviewer Integration:
+- Top Active Reviewers: 126
+- Reviewer Tiers: 4
+- Tier Distribution: {'casual': np.int64(13312), 'regular': np.int64(89), 'active': np.int64(37), 'expert': np.int64(8)}
+
+## Files Created:
+- models/content_based_model.pkl
+- models/preprocessing_components.pkl
+- models/dataset_info.pkl
+- models/model_metadata.pkl
+- models/svd_model.pkl
+- models/knn_model.pkl
+- models/svd_weighted_model.pkl
+- models/knn_weighted_model.pkl

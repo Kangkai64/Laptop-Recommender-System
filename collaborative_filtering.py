@@ -57,6 +57,10 @@ class CollaborativeFiltering:
                 'min_rating_threshold': 3.0,
                 'max_recommendations': 50,
                 'diversity_weight': 0.3
+            },
+            'training': {
+                'use_top_active_reviewers': True,
+                'top_reviewers_path': 'top-active-reviewers.json'
             }
         }
         
@@ -64,6 +68,18 @@ class CollaborativeFiltering:
             self._update_config(config)
         
         logger.info("CollaborativeFiltering initialized successfully")
+
+        # Load top active reviewers list if configured
+        self._top_active_reviewers: Optional[set] = None
+        try:
+            if self.config.get('training', {}).get('use_top_active_reviewers', True):
+                self._top_active_reviewers = self._load_top_active_reviewers(
+                    self.config.get('training', {}).get('top_reviewers_path', 'top-active-reviewers.json')
+                )
+                if self._top_active_reviewers:
+                    logger.info(f"Loaded {len(self._top_active_reviewers)} top active reviewers for training filter")
+        except Exception as e:
+            logger.warning(f"Top active reviewers could not be loaded: {e}")
     
     def _update_config(self, config: Dict) -> None:
         """Update configuration with custom parameters."""
@@ -72,6 +88,52 @@ class CollaborativeFiltering:
                 self.config[section].update(params)
             else:
                 self.config[section] = params
+    
+    def _try_load_saved_model(self) -> bool:
+        """Try to load a pre-trained collaborative filtering model (joblib preferred)."""
+        try:
+            import os
+            from joblib import load as joblib_load
+            import pickle
+
+            # Preferred trained artifact paths (most recent format first)
+            candidate_paths = [
+                'models/collaborative_model.pkl',
+                'models/collaborative/collaborative_model.pkl',
+                'models/svd_model.pkl'  # legacy
+            ]
+
+            for path in candidate_paths:
+                if not os.path.exists(path):
+                    continue
+                # Try joblib first
+                try:
+                    model_data = joblib_load(path)
+                except Exception:
+                    # Fallback to pickle
+                    try:
+                        with open(path, 'rb') as f:
+                            model_data = pickle.load(f)
+                    except Exception:
+                        continue
+
+                # Support both new and legacy key sets
+                self.user_item_matrix = model_data.get('user_item_matrix')
+                self.user_similarity_matrix = model_data.get('user_similarity_matrix')
+                self.item_similarity_matrix = model_data.get('item_similarity_matrix')
+                self.user_factors = model_data.get('user_factors')
+                self.item_factors = model_data.get('item_factors')
+
+                if self.user_item_matrix is not None:
+                    logger.info(f"Loaded trained collaborative model from {path}")
+                    return True
+
+            logger.info("No trained collaborative model found; will build from data")
+            return False
+
+        except Exception as e:
+            logger.warning(f"Failed to load pre-trained collaborative model: {e}; will train new model")
+            return False
     
     def create_enhanced_user_item_matrix(self) -> pd.DataFrame:
         """Create enhanced user-item matrix including implicit feedback from behavior data."""
@@ -168,20 +230,33 @@ class CollaborativeFiltering:
         """Create user-item rating matrix from rating data."""
         logger.info("Creating user-item rating matrix...")
         
+        # Check if we can load a pre-trained model first
+        if self._try_load_saved_model():
+            logger.info("Using pre-trained collaborative filtering model")
+            return self.user_item_matrix
+        
         # Reset any existing matrix to ensure clean state
         self.user_item_matrix = None
         
         try:
+            # Optionally filter ratings to top active reviewers for denser, higher-quality matrix
+            ratings_df = self.df_rating
+            if self._top_active_reviewers and 'user_id' in ratings_df.columns:
+                before = len(ratings_df)
+                ratings_df = ratings_df[ratings_df['user_id'].astype(str).isin(self._top_active_reviewers)].copy()
+                after = len(ratings_df)
+                logger.info(f"Applied top-active-reviewers filter: {before} -> {after} ratings")
+
             # Ensure required columns exist
             required_cols = ['user_id_encoded', 'asin', 'rating']
-            if not all(col in self.df_rating.columns for col in required_cols):
-                if 'user_id' in self.df_rating.columns:
-                    self.df_rating['user_id_encoded'] = self.df_rating['user_id']
+            if not all(col in ratings_df.columns for col in required_cols):
+                if 'user_id' in ratings_df.columns:
+                    ratings_df['user_id_encoded'] = ratings_df['user_id']
                 else:
                     raise ValueError("Required columns not found in rating data")
             
             # Create user-item matrix
-            self.user_item_matrix = self.df_rating.pivot_table(
+            self.user_item_matrix = ratings_df.pivot_table(
                 index='user_id_encoded',
                 columns='asin',
                 values='rating',
@@ -230,6 +305,37 @@ class CollaborativeFiltering:
             logger.warning("Creating minimal fallback matrix")
             self.user_item_matrix = pd.DataFrame(index=[0], columns=['dummy_item'], data=[[0]])
             return self.user_item_matrix
+
+    def _load_top_active_reviewers(self, filepath: str) -> Optional[set]:
+        """Load the set of top active reviewer user_ids from a JSON file."""
+        import os
+        import json
+        try:
+            if not filepath:
+                return None
+            if not os.path.exists(filepath):
+                logger.info(f"Top active reviewers file not found: {filepath}")
+                return None
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # The file may contain a list of user_id strings or dicts with a key
+            if isinstance(data, list):
+                if data and isinstance(data[0], dict):
+                    # Try common keys
+                    keys = ['user_id', 'reviewer_id', 'id']
+                    ids = []
+                    for row in data:
+                        for k in keys:
+                            if k in row:
+                                ids.append(str(row[k]))
+                                break
+                    return set(ids)
+                else:
+                    return set(str(x) for x in data)
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to load top active reviewers: {e}")
+            return None
     
     def is_initialized(self) -> bool:
         """Check if the collaborative filtering system is properly initialized."""
@@ -301,7 +407,7 @@ class CollaborativeFiltering:
                     n_components=n_components,
                     random_state=self.config['matrix_factorization']['random_state'],
                     max_iter=self.config['matrix_factorization']['max_iter'],
-                    alpha=self.config['matrix_factorization']['alpha']
+                    alpha_W=self.config['matrix_factorization']['alpha']  
                 )
                 self.user_factors = model.fit_transform(self.user_item_matrix)
                 self.item_factors = model.components_.T
