@@ -112,6 +112,12 @@ def convert_numpy_to_python(obj):
     """Recursively convert numpy objects to Python native types for JSON serialization."""
     if obj is None:
         return None
+    elif isinstance(obj, bytes):
+        # Convert bytes to string for JSON serialization
+        try:
+            return obj.decode('utf-8')
+        except UnicodeDecodeError:
+            return str(obj)
     elif hasattr(obj, 'shape') and len(obj.shape) > 0:  # numpy array
         return obj.tolist()
     elif hasattr(obj, 'item'):  # numpy scalar
@@ -1003,6 +1009,16 @@ def laptop_detail(laptop_id):
                 if 'text' not in rating and 'text_clean' not in rating:
                     rating['text'] = ''
     
+    # Track view in local database if a user is selected
+    try:
+        if user_manager is not None and 'current_user' in session and session['current_user']:
+            current_user_id = session['current_user'].get('user_id')
+            if current_user_id:
+                # Record a view behavior and update user_views counters
+                user_manager.track_behavior(current_user_id, laptop_id, 'view', {'page': 'laptop_detail'})
+    except Exception as e:
+        logger.warning(f"Could not track view for laptop {laptop_id}: {e}")
+
     return render_template('laptop_detail.html', 
                          laptop=laptop, 
                          similar_laptops=similar_laptops,
@@ -1615,25 +1631,48 @@ def api_search_users():
         max_rating_count = request.args.get('max_rating_count', type=int)
         min_avg_rating = request.args.get('min_avg_rating', type=float)
         max_avg_rating = request.args.get('max_avg_rating', type=float)
+        verify_mapping = request.args.get('verify_mapping', default=0, type=int)
         
         users_data = []
         
         # Search in the user database (only if no filters are applied)
         if not any([min_rating_count, max_rating_count, min_avg_rating, max_avg_rating]):
+            # If no search term, list recent local users
+            local_users = []
             if search_term:
-                users = user_manager.search_users(search_term, limit)
-                for user in users:
-                    users_data.append({
-                        'user_id': user.user_id,
-                        'username': user.username,
-                        'email': user.email,
-                        'created_at': user.created_at,
-                        'last_active': user.last_active,
-                        'total_views': user.total_views,
-                        'total_ratings': user.total_ratings,
-                        'total_comments': user.total_comments,
-                        'is_existing': False
-                    })
+                local_users = user_manager.search_users(search_term, limit)
+            else:
+                local_users = user_manager.list_users(limit)
+
+            # Include local users, but hide zero-activity ones except if they were just created (last 10 minutes)
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            recent_window = now - timedelta(minutes=10)
+            for user in local_users:
+                has_activity = any([
+                    getattr(user, 'total_views', 0) > 0,
+                    getattr(user, 'total_ratings', 0) > 0,
+                    getattr(user, 'total_comments', 0) > 0
+                ])
+                try:
+                    created_dt = datetime.fromisoformat(user.created_at)
+                except Exception:
+                    created_dt = now
+                is_recent = created_dt >= recent_window
+                if not has_activity and not is_recent:
+                    continue
+
+                users_data.append({
+                    'user_id': user.user_id,
+                    'username': user.username,
+                    'email': user.email,
+                    'created_at': user.created_at,
+                    'last_active': user.last_active,
+                    'total_views': user.total_views,
+                    'total_ratings': user.total_ratings,
+                    'total_comments': user.total_comments,
+                    'is_existing': False
+                })
         
         # Search in existing users from rating dataset with filters
         existing_users = user_manager.get_existing_users_from_ratings(
@@ -1645,15 +1684,60 @@ def api_search_users():
             max_avg_rating=max_avg_rating,
             limit=limit
         )
+        # Build a blocklist of local usernames that have zero stats (to avoid showing them again)
+        zero_stat_usernames = set()
+        try:
+            import sqlite3
+            conn = sqlite3.connect('data/user_data.db')
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT username FROM users 
+                WHERE (COALESCE(total_views,0)=0 AND COALESCE(total_ratings,0)=0 AND COALESCE(total_comments,0)=0)
+            ''')
+            zero_stat_usernames = {row[0] for row in cur.fetchall()}
+            conn.close()
+        except Exception:
+            zero_stat_usernames = set()
         
+        # Optional: create a single HF client for mapping verification to avoid repeated loads
+        hf_client = None
+        if verify_mapping:
+            try:
+                from huggingface_sql_client import create_hf_sql_client
+                hf_client = create_hf_sql_client()
+            except Exception:
+                hf_client = None
+
         for existing_user in existing_users:
+            # Skip existing users if a local user with zero stats exists for same username
+            if existing_user['username'] in zero_stat_usernames:
+                continue
+
+            # Optional lightweight mappability check (disabled by default for speed)
+            if verify_mapping and hf_client is not None and df_laptop is not None:
+                try:
+                    if existing_user.get('total_ratings', 0) > 0:
+                        sample_ratings = hf_client.get_user_ratings(existing_user['user_id_encoded'], limit=5)
+                        mapped_any = False
+                        for r in sample_ratings:
+                            asin = r['laptop_id']
+                            if user_manager._get_laptop_id_from_asin(asin, df_laptop) is not None:
+                                mapped_any = True
+                                break
+                        if not mapped_any:
+                            continue
+                except Exception:
+                    # If verification fails, fall through and include
+                    pass
+
             users_data.append({
                 'user_id': f"existing_{existing_user['user_id_encoded']}",
                 'username': existing_user['username'],
                 'email': None,
                 'created_at': existing_user.get('first_rating', ''),
                 'last_active': existing_user.get('last_rating', ''),
-                'total_views': 0,
+                # Amazon dataset has no explicit views; use ratings count as views for consistency
+                'total_views': existing_user['total_ratings'],
                 'total_ratings': existing_user['total_ratings'],
                 'total_comments': 0,
                 'is_existing': True,
@@ -1661,6 +1745,12 @@ def api_search_users():
                 'avg_rating': existing_user.get('avg_rating', 0.0)
             })
         
+        # Final guard: drop any local users with zero activity
+        users_data = [
+            u for u in users_data
+            if (u.get('is_existing') is True) or (u.get('total_views', 0) > 0 or u.get('total_ratings', 0) > 0 or u.get('total_comments', 0) > 0)
+        ]
+
         return jsonify({
             'success': True,
             'users': users_data,
@@ -1984,12 +2074,75 @@ def api_get_enhanced_user_views(user_id):
             return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
         
         limit = request.args.get('limit', 50, type=int)
-        viewed_products = user_manager.get_enhanced_user_views(user_id, limit)
         
+        # Check if this is an existing user from Amazon dataset
+        # For now, we'll use local database data since the user was already synced
+        use_amazon_data = False
+        if user_id.startswith('existing_'):
+            # Extract the original user_id_encoded
+            user_id_encoded = user_id[9:]  # Remove 'existing_' prefix
+            use_amazon_data = True
+            
+            # Try to get ratings from Amazon dataset and convert them to views
+            try:
+                from huggingface_sql_client import create_hf_sql_client
+                hf_client = create_hf_sql_client()
+                ratings = hf_client.get_user_ratings(user_id_encoded, limit=limit)
+                
+                # Convert ratings to view history (since Amazon data doesn't track views)
+                views_data = []
+                for rating in ratings:
+                    # Map ASIN to laptop_id
+                    asin = rating['laptop_id']  # This is actually ASIN from Amazon dataset
+                    laptop_id = user_manager._get_laptop_id_from_asin(asin, df_laptop)
+                    
+                    if laptop_id is None:
+                        logger.warning(f"Could not find laptop_id for ASIN {asin}, skipping view")
+                        continue
+                    
+                    # Get laptop details from the main database
+                    laptop_details = user_manager._get_laptop_details(laptop_id)
+                    
+                    view_dict = {
+                        'laptop_id': laptop_id,
+                        'view_count': 1,  # Each rating represents at least one view
+                        'first_viewed': rating['timestamp'],
+                        'last_viewed': rating['timestamp'],
+                        'laptop_title': laptop_details.get('title_y'),
+                        'laptop_brand': laptop_details.get('brand'),
+                        'laptop_price': laptop_details.get('price_myr'),
+                        'laptop_rating': laptop_details.get('average_rating'),
+                        'laptop_image': laptop_details.get('image')
+                    }
+                    
+                    # Convert any non-serializable objects
+                    view_dict = convert_numpy_to_python(view_dict)
+                    views_data.append(view_dict)
+                
+                logger.info(f"Retrieved {len(views_data)} view records from Amazon dataset for user {user_id}")
+                
+                return jsonify({
+                    'success': True,
+                    'viewed_products': views_data,
+                    'count': len(views_data),
+                    'user_id': user_id,
+                    'source': 'amazon_dataset'
+                })
+                
+            except Exception as e:
+                logger.warning(f"Failed to get Amazon views for user {user_id}: {e}")
+                # Fall through to local database
+        
+        # Fallback to local database for regular users
+        # Pass the recommender system and df_laptop to ensure laptop details are retrieved
+        viewed_products = user_manager.get_enhanced_user_views(
+            user_id, limit, recommender_system=recommender_system, df_laptop=df_laptop
+        )
+
         # Convert dataclass objects to dictionaries for JSON serialization
         views_data = []
         for product in viewed_products:
-            views_data.append({
+            view_dict = {
                 'laptop_id': product.laptop_id,
                 'view_count': product.view_count,
                 'first_viewed': product.first_viewed,
@@ -1999,12 +2152,61 @@ def api_get_enhanced_user_views(user_id):
                 'laptop_price': product.laptop_price,
                 'laptop_rating': product.laptop_rating,
                 'laptop_image': product.laptop_image
-            })
-        
+            }
+
+            # Convert any non-serializable objects
+            view_dict = convert_numpy_to_python(view_dict)
+            views_data.append(view_dict)
+
+        # If no view data or laptop details missing (ID drift), synthesize from ratings as a fallback
+        original_views = list(views_data)
+        if len(views_data) == 0 or all(not v.get('laptop_title') for v in views_data):
+            try:
+                ratings = user_manager.get_user_ratings(user_id, limit)
+                synthesized = []
+                for rating in ratings:
+                    laptop_id = rating['laptop_id']
+                    laptop_details = user_manager._get_laptop_details_with_context(
+                        laptop_id, recommender_system=recommender_system, df_laptop=df_laptop
+                    )
+                    if not laptop_details:
+                        # Skip entries that we still cannot resolve
+                        continue
+                    view_dict = {
+                        'laptop_id': int(laptop_id),
+                        'view_count': 1,
+                        'first_viewed': rating['timestamp'],
+                        'last_viewed': rating['timestamp'],
+                        'laptop_title': laptop_details.get('title_y'),
+                        'laptop_brand': laptop_details.get('brand'),
+                        'laptop_price': laptop_details.get('price_myr'),
+                        'laptop_rating': laptop_details.get('average_rating'),
+                        'laptop_image': laptop_details.get('image')
+                    }
+                    synthesized.append(convert_numpy_to_python(view_dict))
+
+                if synthesized:
+                    logger.info(
+                        f"Synthesized {len(synthesized)} view records for user {user_id} from ratings fallback"
+                    )
+                    views_data = synthesized
+                else:
+                    # Keep original numeric entries rather than returning empty
+                    views_data = original_views
+            except Exception as e:
+                logger.warning(f"Failed to synthesize views from ratings for {user_id}: {e}")
+                # Ensure we still return any original entries
+                views_data = original_views
+
+        # Filter out any entries that still lack resolvable details to avoid blank cards
+        filtered_views = [v for v in views_data if v.get('laptop_title') or isinstance(v.get('laptop_id'), int)]
+
         return jsonify({
             'success': True,
-            'viewed_products': views_data,
-            'count': len(views_data)
+            'viewed_products': filtered_views,
+            'count': len(filtered_views),
+            'user_id': user_id,
+            'source': 'local_database'
         })
         
     except Exception as e:
@@ -2019,12 +2221,69 @@ def api_get_enhanced_user_ratings(user_id):
             return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
         
         limit = request.args.get('limit', 50, type=int)
-        rating_history = user_manager.get_enhanced_user_ratings(user_id, limit)
+        
+        # Check if this is an existing user from Amazon dataset
+        if user_id.startswith('existing_'):
+            # Extract the original user_id_encoded
+            user_id_encoded = user_id[9:]  # Remove 'existing_' prefix
+            
+            # Try to get ratings from Amazon dataset first
+            try:
+                from huggingface_sql_client import create_hf_sql_client
+                hf_client = create_hf_sql_client()
+                ratings = hf_client.get_user_ratings(user_id_encoded, limit=limit)
+                
+                # Convert to enhanced format with laptop details
+                ratings_data = []
+                for rating in ratings:
+                    # Map ASIN to laptop_id
+                    asin = rating['laptop_id']  # This is actually ASIN from Amazon dataset
+                    laptop_id = user_manager._get_laptop_id_from_asin(asin, df_laptop)
+                    
+                    if laptop_id is None:
+                        logger.warning(f"Could not find laptop_id for ASIN {asin}, skipping rating")
+                        continue
+                    
+                    # Get laptop details from the main database
+                    laptop_details = user_manager._get_laptop_details(laptop_id)
+                    
+                    rating_dict = {
+                        'laptop_id': laptop_id,
+                        'rating': rating['rating'],
+                        'comment': rating['comment'],
+                        'timestamp': rating['timestamp'],
+                        'laptop_title': laptop_details.get('title_y'),
+                        'laptop_brand': laptop_details.get('brand'),
+                        'laptop_price': laptop_details.get('price_myr'),
+                        'laptop_rating': laptop_details.get('average_rating'),
+                        'laptop_image': laptop_details.get('image')
+                    }
+                    
+                    # Convert any non-serializable objects
+                    rating_dict = convert_numpy_to_python(rating_dict)
+                    ratings_data.append(rating_dict)
+                
+                logger.info(f"Retrieved {len(ratings_data)} enhanced ratings from Amazon dataset for user {user_id}")
+                
+                return jsonify({
+                    'success': True,
+                    'rating_history': ratings_data,
+                    'count': len(ratings_data),
+                    'user_id': user_id,
+                    'source': 'amazon_dataset'
+                })
+                
+            except Exception as e:
+                logger.warning(f"Failed to get Amazon ratings for user {user_id}: {e}")
+                # Fall through to local database
+        
+        # Fallback to local database for regular users
+        rating_history = user_manager.get_enhanced_user_ratings(user_id, limit, recommender_system=recommender_system, df_laptop=df_laptop)
         
         # Convert dataclass objects to dictionaries for JSON serialization
         ratings_data = []
         for rating in rating_history:
-            ratings_data.append({
+            rating_dict = {
                 'laptop_id': rating.laptop_id,
                 'rating': rating.rating,
                 'comment': rating.comment,
@@ -2034,12 +2293,18 @@ def api_get_enhanced_user_ratings(user_id):
                 'laptop_price': rating.laptop_price,
                 'laptop_rating': rating.laptop_rating,
                 'laptop_image': rating.laptop_image
-            })
+            }
+            
+            # Convert any non-serializable objects
+            rating_dict = convert_numpy_to_python(rating_dict)
+            ratings_data.append(rating_dict)
         
         return jsonify({
             'success': True,
             'rating_history': ratings_data,
-            'count': len(ratings_data)
+            'count': len(ratings_data),
+            'user_id': user_id,
+            'source': 'local_database'
         })
         
     except Exception as e:
@@ -2178,8 +2443,15 @@ def api_update_user_rating(user_id, laptop_id):
             data={'rating': float(rating), 'comment': comment.strip() if comment else ''}
         )
         
-        # No need for separate comment tracking since it's handled in rating
+        # Also create a distinct comment behavior so Activity History "Comments" shows entries
         comment_behavior_id = None
+        if comment and comment.strip():
+            comment_behavior_id = user_manager.track_behavior(
+                user_id=user_id,
+                laptop_id=int(laptop_id),
+                behavior_type='comment',
+                data={'comment': comment.strip()}
+            )
         
         return jsonify({
             'success': True,
@@ -2218,8 +2490,15 @@ def api_submit_user_rating(user_id, laptop_id=None):
             data={'rating': float(rating), 'comment': comment.strip() if comment else ''}
         )
         
-        # No need for separate comment tracking since it's handled in rating
+        # Also create a distinct comment behavior so Activity History "Comments" shows entries
         comment_behavior_id = None
+        if comment and comment.strip():
+            comment_behavior_id = user_manager.track_behavior(
+                user_id=user_id,
+                laptop_id=int(laptop_id),
+                behavior_type='comment',
+                data={'comment': comment.strip()}
+            )
         
         return jsonify({
             'success': True,
@@ -2362,11 +2641,145 @@ def api_get_user_behavior(user_id):
             return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
         
         behavior_type = request.args.get('type')
-        behaviors = user_manager.get_user_behavior_history(user_id, behavior_type, limit=100)
         
+        # Check if this is an existing user from Amazon dataset
+        if user_id.startswith('existing_'):
+            # Extract the original user_id_encoded
+            user_id_encoded = user_id[9:]  # Remove 'existing_' prefix
+            
+            # Try to get ratings from Amazon dataset and convert them to behavior history
+            try:
+                from huggingface_sql_client import create_hf_sql_client
+                hf_client = create_hf_sql_client()
+                ratings = hf_client.get_user_ratings(user_id_encoded, limit=1000)
+                
+                # Convert ratings to behavior history
+                # IMPORTANT: We need to match the summary statistics counting method
+                # Summary stats count: 1 rating = 1 entry, 1 comment = 1 entry (if comment exists)
+                behaviors = []
+                for rating in ratings:
+                    # Always create a rating behavior
+                    rating_behavior = {
+                        'behavior_id': f"rating_{rating['laptop_id']}_{rating['timestamp']}",
+                        'user_id': user_id,
+                        'laptop_id': rating['laptop_id'],
+                        'behavior_type': 'rating',
+                        'timestamp': rating['timestamp'],
+                        'data': {
+                            'rating': rating['rating'],
+                            'comment': rating['comment'] if rating['comment'] else None
+                        }
+                    }
+                    behaviors.append(rating_behavior)
+                    
+                    # Also synthesize a view behavior for parity with local tracking
+                    view_behavior = {
+                        'behavior_id': f"view_{rating['laptop_id']}_{rating['timestamp']}",
+                        'user_id': user_id,
+                        'laptop_id': rating['laptop_id'],
+                        'behavior_type': 'view',
+                        'timestamp': rating['timestamp'],
+                        'data': {
+                            'source': 'amazon_synthesized'
+                        }
+                    }
+                    behaviors.append(view_behavior)
+                    
+                    # Create a separate comment behavior ONLY if there's a substantial comment
+                    # This matches the summary statistics counting method
+                    if rating['comment'] and len(rating['comment'].strip()) > 0:
+                        comment_behavior = {
+                            'behavior_id': f"comment_{rating['laptop_id']}_{rating['timestamp']}",
+                            'user_id': user_id,
+                            'laptop_id': rating['laptop_id'],
+                            'behavior_type': 'comment',
+                            'timestamp': rating['timestamp'],
+                            'data': {
+                                'comment': rating['comment']
+                            }
+                        }
+                        behaviors.append(comment_behavior)
+                
+                # Debug logging before filtering
+                total_behaviors = len(behaviors)
+                rating_count = len([b for b in behaviors if b['behavior_type'] == 'rating'])
+                comment_count = len([b for b in behaviors if b['behavior_type'] == 'comment'])
+                logger.info(f"Created {total_behaviors} behavior records from Amazon dataset for user {user_id}: {rating_count} ratings, {comment_count} comments")
+                
+                # Filter by behavior type if specified
+                if behavior_type:
+                    behaviors = [b for b in behaviors if b['behavior_type'] == behavior_type]
+                    logger.info(f"After filtering by '{behavior_type}': {len(behaviors)} behaviors")
+                
+                return jsonify({
+                    'success': True,
+                    'behaviors': behaviors,
+                    'user_id': user_id,
+                    'source': 'amazon_dataset'
+                })
+                
+            except Exception as e:
+                logger.warning(f"Failed to get Amazon behavior for user {user_id}: {e}")
+                # Fall through to local database
+        
+        # Fallback to local database for regular users
+        behaviors = user_manager.get_user_behavior_history(user_id, behavior_type, limit=1000)
+
+        # If no behaviors, or if views are missing (even when other behaviors exist),
+        # synthesize view behaviors from local ratings to ensure the Views tab has data
+        needs_views = (
+            behavior_type == 'view' or
+            (behavior_type is None and not any(b['behavior_type'] == 'view' for b in behaviors))
+        )
+        if not behaviors or needs_views:
+            try:
+                ratings = user_manager.get_user_ratings(user_id, limit=1000)
+                synthesized = []
+                for rating in ratings:
+                    if behavior_type in (None, 'rating'):
+                        synthesized.append({
+                            'behavior_id': f"rating_{rating['laptop_id']}_{rating['timestamp']}",
+                            'user_id': user_id,
+                            'laptop_id': rating['laptop_id'],
+                            'behavior_type': 'rating',
+                            'timestamp': rating['timestamp'],
+                            'data': {'rating': rating['rating'], 'comment': rating['comment']}
+                        })
+                    if behavior_type in (None, 'view'):
+                        synthesized.append({
+                            'behavior_id': f"view_{rating['laptop_id']}_{rating['timestamp']}",
+                            'user_id': user_id,
+                            'laptop_id': rating['laptop_id'],
+                            'behavior_type': 'view',
+                            'timestamp': rating['timestamp'],
+                            'data': {'source': 'local_synthesized'}
+                        })
+                    if (behavior_type in (None, 'comment')) and rating['comment']:
+                        synthesized.append({
+                            'behavior_id': f"comment_{rating['laptop_id']}_{rating['timestamp']}",
+                            'user_id': user_id,
+                            'laptop_id': rating['laptop_id'],
+                            'behavior_type': 'comment',
+                            'timestamp': rating['timestamp'],
+                            'data': {'comment': rating['comment']}
+                        })
+                if synthesized:
+                    if behavior_type is None and behaviors:
+                        # Merge, avoiding duplicates by behavior_id
+                        seen = {b['behavior_id'] for b in behaviors}
+                        for s in synthesized:
+                            if s['behavior_id'] not in seen:
+                                behaviors.append(s)
+                    else:
+                        behaviors = synthesized
+            except Exception:
+                pass
+
         return jsonify({
             'success': True,
-            'behaviors': behaviors
+            'behaviors': behaviors,
+            'user_id': user_id,
+            'source': 'local_database'
         })
         
     except Exception as e:
@@ -2415,10 +2828,24 @@ def api_get_user_statistics(user_id):
 
 @app.route('/api/users/current', methods=['GET'])
 def api_get_current_user():
-    """API endpoint to get the current user from session."""
+    """API endpoint to get the current user from session with fresh statistics."""
     try:
         current_user = session.get('current_user')
         if current_user:
+            # Always recalculate stats to ensure accuracy
+            user_id = current_user['user_id']
+            logger.info(f"Getting current user {user_id}, recalculating stats...")
+            recalculated_stats = user_manager.recalculate_user_stats(user_id)
+            logger.info(f"Recalculated stats for current user {user_id}: {recalculated_stats}")
+            
+            # Update the current user data with fresh statistics
+            current_user['total_ratings'] = recalculated_stats['total_ratings']
+            current_user['total_views'] = recalculated_stats['total_views']
+            current_user['total_comments'] = recalculated_stats['total_comments']
+            
+            # Update session with fresh data
+            session['current_user'] = current_user
+            
             return jsonify({
                 'success': True,
                 'user': current_user
@@ -2466,7 +2893,19 @@ def api_create_user_from_existing():
             username = f"User_{user_id_encoded}"
         
         # Create user profile from existing user
-        user = user_manager.create_user_from_existing(user_id_encoded, username, df_rating)
+        user = user_manager.create_user_from_existing(user_id_encoded, username, df_rating, df_laptop)
+
+        # Safety net: if stats are zero, force a sync from Amazon dataset and recalc
+        if (getattr(user, 'total_ratings', 0) == 0 and getattr(user, 'total_views', 0) == 0):
+            try:
+                logger.info(f"Stats zero after creation; forcing Amazon sync for {user.user_id}")
+                user_manager.sync_amazon_data_to_local_db(user.user_id, user_id_encoded, df_laptop)
+                recalculated_stats = user_manager.recalculate_user_stats(user.user_id)
+                user.total_ratings = recalculated_stats.get('total_ratings', 0)
+                user.total_views = recalculated_stats.get('total_views', 0)
+                user.total_comments = recalculated_stats.get('total_comments', 0)
+            except Exception as e:
+                logger.warning(f"Post-create sync failed for {user.user_id}: {e}")
         
         # Store current user in session
         session['current_user'] = {

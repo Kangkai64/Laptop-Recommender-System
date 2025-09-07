@@ -685,15 +685,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function checkCurrentUser() {
-    // First check if we have the user in global variable
-    if (window.currentUser) {
-        currentUser = window.currentUser;
-        displayCurrentUser();
-        loadUserActivity();
-        return;
-    }
-    
-    // If not, fetch from server session
+    // Always fetch fresh data from server to ensure accurate statistics
+    // This ensures we get the latest recalculated stats
     fetch('/api/users/current')
         .then(response => response.json())
         .then(data => {
@@ -776,17 +769,28 @@ function populateUserDropdown(users) {
         return;
     }
     
-    users.forEach(user => {
+    // Filter out local users with no activity and existing users with 0 ratings
+    const filtered = users.filter(u => {
+        if (u.is_existing) {
+            // If a same-named local user exists with zero stats, hide this one too
+            const zeroLocals = users.filter(x => !x.is_existing && x.username === u.username && (x.total_views||0)===0 && (x.total_ratings||0)===0 && (x.total_comments||0)===0);
+            if (zeroLocals.length > 0) return false;
+            return (u.total_ratings || 0) > 0; // require at least one rating
+        }
+        return (u.total_views || 0) > 0 || (u.total_ratings || 0) > 0 || (u.total_comments || 0) > 0;
+    });
+    
+    filtered.forEach(user => {
         const option = document.createElement('option');
         option.value = user.user_id;
         
         let displayText = `${user.username}`;
         if (user.is_existing) {
-            displayText += ` (${user.total_ratings} ratings`;
-            if (user.avg_rating && user.avg_rating > 0) {
-                displayText += `, avg: ${user.avg_rating.toFixed(1)}★`;
-            }
-            displayText += ')';
+            // Always show the full encoded ID explicitly for existing users
+            displayText = `User_${user.user_id_encoded}`;
+            const views = (user.total_views || 0);
+            const ratings = (user.total_ratings || 0);
+            displayText += ` (${views} views, ${ratings} ratings)`;
             option.setAttribute('data-is-existing', 'true');
             option.setAttribute('data-user-id-encoded', user.user_id_encoded);
         } else {
@@ -935,7 +939,8 @@ function selectUserById(userId) {
     if (selectedOption && selectedOption.getAttribute('data-is-existing') === 'true') {
         // Create user profile from existing user
         const user_id_encoded = selectedOption.getAttribute('data-user-id-encoded');
-        const username = selectedOption.textContent.split(' (')[0];
+        // Ensure full ID is used in the username
+        const username = `User_${user_id_encoded}`;
         
         fetch('/api/users/create-from-existing', {
             method: 'POST',
@@ -1101,13 +1106,13 @@ function loadViewHistory() {
                                                 <div class="col-md-4">
                                                     <div class="stat-badge">
                                                         <i class="fas fa-calendar-alt text-info"></i>
-                                                        <span class="ms-1">First: ${new Date(product.first_viewed).toLocaleDateString()}</span>
+                                                        <span class="ms-1">First: ${(()=>{const d=new Date(product.first_viewed);return isNaN(d)?'N/A':d.toLocaleDateString();})()}</span>
                                                     </div>
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="stat-badge">
                                                         <i class="fas fa-clock text-success"></i>
-                                                        <span class="ms-1">Last: ${new Date(product.last_viewed).toLocaleDateString()}</span>
+                                                        <span class="ms-1">Last: ${(()=>{const d=new Date(product.last_viewed);return isNaN(d)?'N/A':d.toLocaleDateString();})()}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1191,7 +1196,16 @@ function loadRatingHistory() {
                                                             Your Review
                                                         </h6>
                                                         <div class="review-content">
-                                                            <p class="mb-0">"${rating.comment}"</p>
+                                                            <p class="mb-0">
+                                                                <span class="comment-text" data-full-comment="${rating.comment.replace(/"/g, '&quot;')}">
+                                                                    ${rating.comment.length > 200 ? rating.comment.substring(0, 200) + '...' : rating.comment}
+                                                                </span>
+                                                                ${rating.comment.length > 200 ? `
+                                                                    <button class="btn btn-link btn-sm p-0 ml-1 show-more-btn" onclick="toggleComment(this)">
+                                                                        <small>Show more</small>
+                                                                    </button>
+                                                                ` : ''}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 ` : ''}
@@ -1329,7 +1343,16 @@ function displayBehaviors(behaviors) {
                         ${behavior.data.comment ? `
                             <div class="comment-box p-2 bg-light rounded mb-1">
                                 <small class="text-muted">Comment:</small>
-                                <p class="mb-0">"${behavior.data.comment}"</p>
+                                <p class="mb-0">
+                                    <span class="comment-text" data-full-comment="${behavior.data.comment.replace(/"/g, '&quot;')}">
+                                        ${behavior.data.comment.length > 200 ? behavior.data.comment.substring(0, 200) + '...' : behavior.data.comment}
+                                    </span>
+                                    ${behavior.data.comment.length > 200 ? `
+                                        <button class="btn btn-link btn-sm p-0 ml-1 show-more-btn" onclick="toggleComment(this)">
+                                            <small>Show more</small>
+                                        </button>
+                                    ` : ''}
+                                </p>
                             </div>
                         ` : ''}
                         ${behavior.data.page ? `<small class="text-muted">Page: ${behavior.data.page}</small>` : ''}
@@ -1370,6 +1393,20 @@ function getBehaviorColor(type) {
         'dislike': '#dc3545'
     };
     return colors[type] || '#6c757d';
+}
+
+function toggleComment(button) {
+    const commentText = button.previousElementSibling;
+    const fullComment = commentText.getAttribute('data-full-comment');
+    const currentText = commentText.textContent;
+    
+    if (button.textContent.trim() === 'Show more') {
+        commentText.textContent = fullComment;
+        button.innerHTML = '<small>Show less</small>';
+    } else {
+        commentText.textContent = fullComment.substring(0, 200) + '...';
+        button.innerHTML = '<small>Show more</small>';
+    }
 }
 
 function filterBehavior(type) {
@@ -1631,7 +1668,7 @@ function refreshUserStats() {
     
     console.log('Refreshing user stats for user:', currentUser.user_id);
     
-    // Fetch updated user data
+    // Fetch updated user data (this will recalculate stats)
     fetch(`/api/users/${currentUser.user_id}`)
         .then(response => response.json())
         .then(data => {
