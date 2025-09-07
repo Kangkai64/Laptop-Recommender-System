@@ -1,7 +1,7 @@
 
 # Laptop Recommender System - Training Summary
 
-## Training Date: 2025-09-07 17:50:46
+## Training Date: 2025-09-07 21:16:03
 
 ## Models Trained:
 1. **Content-Based Filtering Model**

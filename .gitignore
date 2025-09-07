@@ -42,6 +42,7 @@ build/
 
 ### Python ###
 __pycache__/
+models/
 *.py[cod]
 *$py.class
 *.so

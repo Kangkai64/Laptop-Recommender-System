@@ -2,20 +2,15 @@
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 import pandas as pd
-import numpy as np
 import logging
-import os
 import sqlite3
-from datetime import datetime
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List
 
 # Import our recommendation system
 from Laptop_Recommender_System import LaptopRecommenderSystem
 from data_preprocessing import LaptopDataPreprocessor
-from evaluation_metrics import create_evaluator
 from user_satisfaction_system import create_satisfaction_system
-from evaluate_recommender_system import RecommenderSystemEvaluator
 from user_management import create_user_manager
 
 # Configure logging
@@ -29,14 +24,12 @@ app.secret_key = 'laptop_recommender_secret_key_2024'
 recommender_system = None
 df_laptop = None
 df_rating = None
-evaluator = None
 satisfaction_system = None
-evaluation_results = None
 user_manager = None
 
 def initialize_system():
     """Initialize the recommendation system and load data."""
-    global recommender_system, df_laptop, df_rating, evaluator, satisfaction_system, user_manager
+    global recommender_system, df_laptop, df_rating, satisfaction_system, user_manager
     
     try:
         logger.info("Initializing Laptop Recommender System...")
@@ -90,9 +83,6 @@ def initialize_system():
         
         # Initialize the recommendation algorithms
         recommender_system.initialize_recommendation_engines()
-        
-        # Initialize evaluation system
-        evaluator = create_evaluator(df_laptop, df_rating)
         
         # Initialize satisfaction system
         satisfaction_system = create_satisfaction_system()
@@ -1178,17 +1168,7 @@ def analytics():
             count = len(df_rating[df_rating['rating'] == rating])
             rating_counts[str(rating)] = int(count)
         analytics_data['rating_distribution'] = rating_counts
-    
-    # Get evaluation metrics (use cached results if available)
-    evaluation_metrics = get_evaluation_metrics()
-    
-    # Get satisfaction metrics
-    satisfaction_metrics = get_satisfaction_metrics()
-    
-    return render_template('analytics.html', 
-                         analytics=analytics_data,
-                         evaluation_metrics=evaluation_metrics,
-                         satisfaction_metrics=satisfaction_metrics)
+    return render_template('analytics.html', analytics=analytics_data)
 
 @app.route('/api/stats')
 def api_stats():
@@ -1297,273 +1277,6 @@ def api_load_more_laptops():
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
-
-def get_evaluation_metrics():
-    """Get evaluation metrics (cached or generate new ones)."""
-    global evaluation_results
-    
-    try:
-        if evaluation_results is None:
-            # Generate default metrics if no evaluation has been run
-            evaluation_results = {
-                'content_based_evaluation': {
-                    'precision': 0.785,
-                    'recall': 0.732,
-                    'f1_score': 0.758,
-                    'coverage': 0.891
-                },
-                'collaborative_evaluation': {
-                    'precision': 0.812,
-                    'recall': 0.768,
-                    'f1_score': 0.789,
-                    'coverage': 0.856
-                },
-                'hybrid_evaluation': {
-                    'avg_precision': 0.845,
-                    'avg_recall': 0.801,
-                    'avg_f1_score': 0.823,
-                    'avg_response_time': 1.2,
-                    'scenarios_tested': 5
-                },
-                'rating_prediction_evaluation': {
-                    'mse': 0.456,
-                    'rmse': 0.675,
-                    'mae': 0.523,
-                    'mape': 12.3,
-                    'r2_score': 0.782
-                },
-                'system_health_check': {
-                    'overall_status': 'healthy',
-                    'data_quality': {
-                        'data_completeness': 0.92
-                    },
-                    'performance_indicators': {
-                        'memory_usage_mb': 512,
-                        'recommendation_generation_time': 1.2
-                    }
-                },
-                'performance_benchmarks': {
-                    'recommendation_generation_time': {
-                        'avg_time_seconds': 1.8,
-                        'recommendations_per_minute': 33,
-                        'meets_target': True
-                    },
-                    'memory_usage': {
-                        'current_usage_mb': 512,
-                        'within_target': True
-                    },
-                    'throughput': {
-                        'recommendations_per_minute': 33,
-                        'concurrent_users_supported': 50
-                    }
-                },
-                'recommendations': [
-                    "Consider implementing real-time user feedback collection",
-                    "Add more sophisticated evaluation metrics including novelty",
-                    "Implement A/B testing framework for continuous improvement"
-                ]
-            }
-        
-        return evaluation_results
-        
-    except Exception as e:
-        logger.error(f"Error getting evaluation metrics: {e}")
-        return {}
-
-def get_satisfaction_metrics():
-    """Get user satisfaction metrics."""
-    global satisfaction_system
-    
-    try:
-        if satisfaction_system is None:
-            return {
-                'overall_satisfaction': 4.2,
-                'satisfaction_percentage': 84.0,
-                'response_count': 156,
-                'response_rate': 78.5,
-                'completed_sessions': 89,
-                'category_scores': {
-                    'overall': 4.2,
-                    'quality': 4.1,
-                    'performance': 3.8,
-                    'usability': 4.3,
-                    'trust': 4.0,
-                    'discovery': 3.9,
-                    'value': 4.1,
-                    'advocacy': 4.0
-                }
-            }
-        
-        return satisfaction_system.get_satisfaction_dashboard_data()
-        
-    except Exception as e:
-        logger.error(f"Error getting satisfaction metrics: {e}")
-        return {
-            'overall_satisfaction': 0.0,
-            'satisfaction_percentage': 0.0,
-            'response_count': 0,
-            'response_rate': 0.0,
-            'completed_sessions': 0,
-            'category_scores': {}
-        }
-
-@app.route('/api/run-evaluation', methods=['POST'])
-def api_run_evaluation():
-    """API endpoint to run comprehensive evaluation."""
-    global evaluation_results
-    
-    try:
-        logger.info("Starting comprehensive evaluation...")
-        
-        # Create evaluator instance
-        system_evaluator = RecommenderSystemEvaluator()
-        
-        # Initialize system
-        if not system_evaluator.initialize_system():
-            return jsonify({
-                'success': False,
-                'error': 'Failed to initialize evaluation system'
-            }), 500
-        
-        # Run comprehensive evaluation
-        evaluation_results = system_evaluator.run_comprehensive_evaluation()
-        
-        logger.info("Evaluation completed successfully")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Evaluation completed successfully',
-            'evaluation_duration': evaluation_results.get('evaluation_duration', 0),
-            'metrics_count': len(evaluation_results)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error running evaluation: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/evaluation-metrics')
-def api_evaluation_metrics():
-    """API endpoint to get current evaluation metrics."""
-    try:
-        metrics = get_evaluation_metrics()
-        
-        return jsonify({
-            'success': True,
-            'metrics': metrics
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting evaluation metrics: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/satisfaction-metrics')
-def api_satisfaction_metrics():
-    """API endpoint to get user satisfaction metrics."""
-    try:
-        metrics = get_satisfaction_metrics()
-        
-        return jsonify({
-            'success': True,
-            'metrics': metrics
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting satisfaction metrics: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/submit-satisfaction', methods=['POST'])
-def api_submit_satisfaction():
-    """API endpoint to submit user satisfaction feedback."""
-    global satisfaction_system
-    
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
-        
-        user_id = data.get('user_id', 'anonymous')
-        session_id = data.get('session_id')
-        question_id = data.get('question_id')
-        response_value = data.get('response_value')
-        context = data.get('context', {})
-        
-        if not session_id or not question_id or response_value is None:
-            return jsonify({
-                'success': False,
-                'error': 'Missing required fields: session_id, question_id, response_value'
-            }), 400
-        
-        # Submit response
-        success = satisfaction_system.submit_satisfaction_response(
-            session_id=session_id,
-            question_id=question_id,
-            response_value=response_value,
-            context=context
-        )
-        
-        if success:
-            return jsonify({
-                'success': True,
-                'message': 'Satisfaction response submitted successfully'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to submit satisfaction response'
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Error submitting satisfaction response: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/start-satisfaction-session', methods=['POST'])
-def api_start_satisfaction_session():
-    """API endpoint to start a satisfaction tracking session."""
-    global satisfaction_system
-    
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
-        
-        user_id = data.get('user_id', 'anonymous')
-        recommendation_method = data.get('recommendation_method')
-        
-        session_id = satisfaction_system.start_satisfaction_session(
-            user_id=user_id,
-            recommendation_method=recommendation_method
-        )
-        
-        if session_id:
-            return jsonify({
-                'success': True,
-                'session_id': session_id,
-                'message': 'Satisfaction session started successfully'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to start satisfaction session'
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Error starting satisfaction session: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
 
 # User Management API Routes
 
