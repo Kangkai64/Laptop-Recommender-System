@@ -641,7 +641,8 @@ class CollaborativeFiltering:
                     'title': laptop_data.get('title_y_clean', 'Unknown'),
                     'brand': laptop_data.get('brand', 'Unknown'),
                     'price_myr': laptop_data.get('price_myr', 0),
-                    'average_rating': laptop_data.get('average_rating', 0)
+                    'average_rating': laptop_data.get('average_rating', 0),
+                    'rating_number': laptop_data.get('rating_number', 0)
                 }
             return None
         except Exception:
@@ -1090,6 +1091,95 @@ class CollaborativeFiltering:
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
             raise
+    
+    def save_model(self, filepath: str) -> None:
+        """Save the trained collaborative filtering model and parameters using joblib."""
+        from joblib import dump
+        
+        try:
+            model_data = {
+                'user_item_matrix': self.user_item_matrix,
+                'user_similarity_matrix': self.user_similarity_matrix,
+                'item_similarity_matrix': self.item_similarity_matrix,
+                'user_factors': self.user_factors,
+                'item_factors': self.item_factors,
+                'config': self.config,
+                'enhanced_user_profiles': self.enhanced_user_profiles,
+                'df_laptop_shape': self.df_laptop.shape if self.df_laptop is not None else None,
+                'df_rating_shape': self.df_rating.shape if self.df_rating is not None else None
+            }
+            
+            # Use joblib for efficient serialization of scikit-learn objects
+            dump(model_data, filepath, compress=3)  # compress=3 for good compression/speed balance
+            
+            logger.info(f"Collaborative filtering model saved to {filepath}")
+            
+        except Exception as e:
+            logger.error(f"Error saving collaborative filtering model: {str(e)}")
+            raise
+    
+    def load_model(self, filepath: str) -> None:
+        """Load a previously saved collaborative filtering model using joblib."""
+        from joblib import load
+        
+        try:
+            model_data = load(filepath)
+            
+            # Validate model data structure
+            required_keys = ['config']
+            for key in required_keys:
+                if key not in model_data:
+                    raise ValueError(f"Missing required key '{key}' in saved model")
+            
+            # Load model components (some may be None if not trained)
+            self.user_item_matrix = model_data.get('user_item_matrix')
+            self.user_similarity_matrix = model_data.get('user_similarity_matrix')
+            self.item_similarity_matrix = model_data.get('item_similarity_matrix')
+            self.user_factors = model_data.get('user_factors')
+            self.item_factors = model_data.get('item_factors')
+            self.config = model_data['config']
+            self.enhanced_user_profiles = model_data.get('enhanced_user_profiles', {})
+            
+            # Log model information
+            logger.info(f"Collaborative filtering model loaded from {filepath}")
+            if self.user_item_matrix is not None:
+                logger.info(f"User-item matrix shape: {self.user_item_matrix.shape}")
+            if self.user_similarity_matrix is not None:
+                logger.info(f"User similarity matrix shape: {self.user_similarity_matrix.shape}")
+            if self.item_similarity_matrix is not None:
+                logger.info(f"Item similarity matrix shape: {self.item_similarity_matrix.shape}")
+            if self.user_factors is not None and self.item_factors is not None:
+                logger.info(f"Matrix factorization factors - Users: {self.user_factors.shape}, Items: {self.item_factors.shape}")
+            
+        except Exception as e:
+            logger.error(f"Error loading collaborative filtering model: {str(e)}")
+            raise
+    
+    def is_model_trained(self) -> bool:
+        """Check if the model has been trained and has the necessary components."""
+        return (self.user_item_matrix is not None and 
+                not self.user_item_matrix.empty and
+                self.user_item_matrix.shape[0] > 0)
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about the current model state."""
+        info = {
+            'is_trained': self.is_model_trained(),
+            'has_user_similarity': self.user_similarity_matrix is not None,
+            'has_item_similarity': self.item_similarity_matrix is not None,
+            'has_matrix_factorization': (self.user_factors is not None and self.item_factors is not None),
+            'enhanced_profiles_count': len(self.enhanced_user_profiles)
+        }
+        
+        if self.user_item_matrix is not None:
+            info.update({
+                'user_item_matrix_shape': self.user_item_matrix.shape,
+                'total_users': self.user_item_matrix.shape[0],
+                'total_items': self.user_item_matrix.shape[1],
+                'total_ratings': (self.user_item_matrix > 0).sum().sum()
+            })
+        
+        return info
 
 
 def create_collaborative_filtering(df_laptop: pd.DataFrame, 

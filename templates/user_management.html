@@ -54,7 +54,55 @@
                                     <small class="form-text text-muted" id="searchResultsInfo">
                                         Type to filter users by ID, username, or email
                                     </small>
+                                    <!-- Loading indicator for search -->
+                                    <div id="searchLoadingIndicator" class="text-center mt-2" style="display: none;">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                            <span class="sr-only">Loading...</span>
+                                        </div>
+                                        <small class="text-muted ml-2">Searching users...</small>
+                                    </div>
                                 </div>
+                                
+                                <!-- Advanced Filters -->
+                                <div class="form-group">
+                                    <label>Advanced Filters</label>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <label for="ratingCountFilter" class="form-label small">Rating Count</label>
+                                            <select class="form-control form-control-sm" id="ratingCountFilter">
+                                                <option value="">All users</option>
+                                                <option value="1">1 rating</option>
+                                                <option value="2-5">2-5 ratings</option>
+                                                <option value="6-10">6-10 ratings</option>
+                                                <option value="11-20">11-20 ratings</option>
+                                                <option value="21-50">21-50 ratings</option>
+                                                <option value="51-100">51-100 ratings</option>
+                                                <option value="100+">100+ ratings</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label for="avgRatingFilter" class="form-label small">Avg Rating</label>
+                                            <select class="form-control form-control-sm" id="avgRatingFilter">
+                                                <option value="">Any rating</option>
+                                                <option value="4.5-5.0">4.5 - 5.0 stars</option>
+                                                <option value="4.0-4.5">4.0 - 4.5 stars</option>
+                                                <option value="3.5-4.0">3.5 - 4.0 stars</option>
+                                                <option value="3.0-3.5">3.0 - 3.5 stars</option>
+                                                <option value="2.5-3.0">2.5 - 3.0 stars</option>
+                                                <option value="1.0-2.5">1.0 - 2.5 stars</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="applyFilters">
+                                            <i class="fas fa-filter"></i> Apply Filters
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clearFilters">
+                                            <i class="fas fa-times"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                
                                 <div class="form-group">
                                     <label for="existingUsers">Choose User</label>
                                     <select class="form-control" id="existingUsers" required>
@@ -77,6 +125,9 @@
                         <i class="fas fa-user"></i> Current User
                     </h5>
                     <div>
+                        <button id="refreshStats" class="btn btn-outline-info btn-sm me-2">
+                            <i class="fas fa-sync-alt"></i> Refresh Stats
+                        </button>
                         <button id="switchUser" class="btn btn-outline-primary btn-sm me-2">
                             <i class="fas fa-exchange-alt"></i> Switch User
                         </button>
@@ -465,6 +516,141 @@
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
+
+.laptop-card .card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.laptop-card .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    border-color: #007bff;
+}
+
+.spec-item {
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.spec-item i {
+    width: 16px;
+    text-align: center;
+}
+
+.view-stats {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.stat-badge {
+    display: flex;
+    align-items: center;
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.stat-badge i {
+    font-size: 0.9em;
+}
+
+.laptop-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.laptop-actions .btn {
+    border-radius: 6px;
+    font-size: 0.85em;
+    padding: 6px 12px;
+}
+
+.rating-card .card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.rating-card .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    border-color: #ffc107;
+}
+
+.user-rating-section {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+}
+
+.rating-display {
+    font-size: 1.2em;
+}
+
+.rating-display .rating-value {
+    font-weight: bold;
+    color: #856404;
+}
+
+.user-review {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #17a2b8;
+}
+
+.review-title {
+    color: #17a2b8;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+}
+
+.review-content {
+    font-style: italic;
+    color: #495057;
+}
+
+.laptop-details {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.details-title {
+    color: #28a745;
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+.detail-item {
+    margin-bottom: 6px;
+    font-size: 0.9em;
+}
+
+.detail-item i {
+    width: 16px;
+    text-align: center;
+}
+
+.rating-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rating-actions .btn {
+    border-radius: 6px;
+    font-size: 0.85em;
+    padding: 6px 12px;
+}
 </style>
 
 <script>
@@ -483,11 +669,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('selectUserForm').addEventListener('submit', selectUser);
     document.getElementById('logoutUser').addEventListener('click', logoutUser);
     document.getElementById('switchUser').addEventListener('click', switchUser);
+    document.getElementById('refreshStats').addEventListener('click', refreshUserStats);
     document.getElementById('preferencesForm').addEventListener('submit', savePreferences);
     
     // Search functionality
     document.getElementById('userSearch').addEventListener('input', filterUsers);
     document.getElementById('clearSearch').addEventListener('click', clearSearch);
+    
+    // Advanced filter functionality
+    document.getElementById('applyFilters').addEventListener('click', applyAdvancedFilters);
+    document.getElementById('clearFilters').addEventListener('click', clearAdvancedFilters);
     
     // Tab functionality
     initializeTabs();
@@ -529,8 +720,21 @@ function checkCurrentUser() {
         });
 }
 
-function loadExistingUsers() {
-    fetch('/api/users')
+function loadExistingUsers(searchTerm = '', filters = {}) {
+    // Show loading indicators
+    const searchLoadingIndicator = document.getElementById('searchLoadingIndicator');
+
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('q', searchTerm);
+    if (filters.min_rating_count !== undefined) params.append('min_rating_count', filters.min_rating_count);
+    if (filters.max_rating_count !== undefined) params.append('max_rating_count', filters.max_rating_count);
+    if (filters.min_avg_rating !== undefined) params.append('min_avg_rating', filters.min_avg_rating);
+    if (filters.max_avg_rating !== undefined) params.append('max_avg_rating', filters.max_avg_rating);
+    
+    const url = `/api/users/search?${params.toString()}`;
+    
+    fetch(url)
         .then(response => response.json())
         .then(data => {
             if (data.success && data.users) {
@@ -539,10 +743,23 @@ function loadExistingUsers() {
                 
                 // Populate dropdown with all users
                 populateUserDropdown(allUsers);
+                
+                // Update search info
+                const searchInfo = document.getElementById('searchResultsInfo');
+                if (searchTerm || Object.keys(filters).length > 0) {
+                    searchInfo.textContent = `Found ${data.total_found} users matching criteria`;
+                } else {
+                    searchInfo.textContent = 'Type to filter users by ID, username, or email';
+                }
             }
         })
         .catch(error => {
             console.error('Error loading users:', error);
+            showNotification('Error loading users', 'error');
+        })
+        .finally(() => {
+            // Hide loading indicators
+            searchLoadingIndicator.style.display = 'none';
         });
 }
 
@@ -565,7 +782,11 @@ function populateUserDropdown(users) {
         
         let displayText = `${user.username}`;
         if (user.is_existing) {
-            displayText += ` (Existing user - ${user.total_ratings} ratings)`;
+            displayText += ` (${user.total_ratings} ratings`;
+            if (user.avg_rating && user.avg_rating > 0) {
+                displayText += `, avg: ${user.avg_rating.toFixed(1)}★`;
+            }
+            displayText += ')';
             option.setAttribute('data-is-existing', 'true');
             option.setAttribute('data-user-id-encoded', user.user_id_encoded);
         } else {
@@ -578,47 +799,89 @@ function populateUserDropdown(users) {
 }
 
 function filterUsers() {
-    const searchTerm = document.getElementById('userSearch').value.toLowerCase().trim();
-    const searchInfo = document.getElementById('searchResultsInfo');
+    const searchTerm = document.getElementById('userSearch').value.trim();
+    const currentFilters = getCurrentFilters();
     
-    if (searchTerm === '') {
-        // Show all users if search is empty
-        populateUserDropdown(allUsers);
-        searchInfo.textContent = 'Type to filter users by ID, username, or email';
-        searchInfo.className = 'form-text text-muted';
-    } else {
-        // Filter users based on search term
-        const filteredUsers = allUsers.filter(user => {
-            const username = user.username.toLowerCase();
-            const userId = user.user_id.toLowerCase();
-            const userEncodedId = user.user_id_encoded ? user.user_id_encoded.toString() : '';
-            
-            return username.includes(searchTerm) || 
-                   userId.includes(searchTerm) || 
-                   userEncodedId.includes(searchTerm);
-        });
-        
-        populateUserDropdown(filteredUsers);
-        
-        // Update search info
-        if (filteredUsers.length === 0) {
-            searchInfo.textContent = 'No users found matching your search';
-            searchInfo.className = 'form-text text-warning';
-        } else {
-            searchInfo.textContent = `Found ${filteredUsers.length} user(s) matching "${searchTerm}"`;
-            searchInfo.className = 'form-text text-success';
+    // Use the new API-based search
+    loadExistingUsers(searchTerm, currentFilters);
+}
+
+function getCurrentFilters() {
+    const ratingCountFilter = document.getElementById('ratingCountFilter').value;
+    const avgRatingFilter = document.getElementById('avgRatingFilter').value;
+    
+    const filters = {};
+    
+    // Parse rating count filter
+    if (ratingCountFilter) {
+        if (ratingCountFilter === '1') {
+            filters.min_rating_count = 1;
+            filters.max_rating_count = 1;
+        } else if (ratingCountFilter === '2-5') {
+            filters.min_rating_count = 2;
+            filters.max_rating_count = 5;
+        } else if (ratingCountFilter === '6-10') {
+            filters.min_rating_count = 6;
+            filters.max_rating_count = 10;
+        } else if (ratingCountFilter === '11-20') {
+            filters.min_rating_count = 11;
+            filters.max_rating_count = 20;
+        } else if (ratingCountFilter === '21-50') {
+            filters.min_rating_count = 21;
+            filters.max_rating_count = 50;
+        } else if (ratingCountFilter === '51-100') {
+            filters.min_rating_count = 51;
+            filters.max_rating_count = 100;
+        } else if (ratingCountFilter === '100+') {
+            filters.min_rating_count = 101;
         }
     }
+    
+    // Parse average rating filter
+    if (avgRatingFilter) {
+        if (avgRatingFilter === '4.5-5.0') {
+            filters.min_avg_rating = 4.5;
+            filters.max_avg_rating = 5.0;
+        } else if (avgRatingFilter === '4.0-4.5') {
+            filters.min_avg_rating = 4.0;
+            filters.max_avg_rating = 4.5;
+        } else if (avgRatingFilter === '3.5-4.0') {
+            filters.min_avg_rating = 3.5;
+            filters.max_avg_rating = 4.0;
+        } else if (avgRatingFilter === '3.0-3.5') {
+            filters.min_avg_rating = 3.0;
+            filters.max_avg_rating = 3.5;
+        } else if (avgRatingFilter === '2.5-3.0') {
+            filters.min_avg_rating = 2.5;
+            filters.max_avg_rating = 3.0;
+        } else if (avgRatingFilter === '1.0-2.5') {
+            filters.min_avg_rating = 1.0;
+            filters.max_avg_rating = 2.5;
+        }
+    }
+    
+    return filters;
+}
+
+function applyAdvancedFilters() {
+    const searchTerm = document.getElementById('userSearch').value.trim();
+    const filters = getCurrentFilters();
+    
+    loadExistingUsers(searchTerm, filters);
+}
+
+function clearAdvancedFilters() {
+    document.getElementById('ratingCountFilter').value = '';
+    document.getElementById('avgRatingFilter').value = '';
+    
+    const searchTerm = document.getElementById('userSearch').value.trim();
+    loadExistingUsers(searchTerm, {});
 }
 
 function clearSearch() {
     document.getElementById('userSearch').value = '';
-    populateUserDropdown(allUsers);
-    
-    // Reset search info
-    const searchInfo = document.getElementById('searchResultsInfo');
-    searchInfo.textContent = 'Type to filter users by ID, username, or email';
-    searchInfo.className = 'form-text text-muted';
+    const currentFilters = getCurrentFilters();
+    loadExistingUsers('', currentFilters);
 }
 
 function createUser(event) {
@@ -737,9 +1000,10 @@ function displayCurrentUser() {
     document.getElementById('currentUserEmail').textContent = currentUser.email || 'Not provided';
     document.getElementById('currentUserCreated').textContent = new Date(currentUser.created_at).toLocaleDateString();
     document.getElementById('currentUserLastActive').textContent = new Date(currentUser.last_active).toLocaleDateString();
-    document.getElementById('totalViews').textContent = currentUser.total_views;
-    document.getElementById('totalRatings').textContent = currentUser.total_ratings;
-    document.getElementById('totalComments').textContent = currentUser.total_comments;
+    // Safely display statistics with fallback to 0
+    document.getElementById('totalViews').textContent = currentUser.total_views || 0;
+    document.getElementById('totalRatings').textContent = currentUser.total_ratings || 0;
+    document.getElementById('totalComments').textContent = currentUser.total_comments || 0;
     
     document.getElementById('currentUserInfo').style.display = 'block';
     document.getElementById('userActivityTabs').style.display = 'block';
@@ -748,210 +1012,276 @@ function displayCurrentUser() {
     // Update global variables for other pages
     window.currentUser = currentUser;
     window.currentUserId = currentUser.user_id;
+    
+    // Debug: Log current user stats for verification
+    console.log('Current User Stats Debug:', {
+        user_id: currentUser.user_id,
+        username: currentUser.username,
+        total_ratings: currentUser.total_ratings,
+        total_views: currentUser.total_views,
+        total_comments: currentUser.total_comments,
+        raw_user_object: currentUser
+    });
+    
+    // Only refresh stats if explicitly requested (removed automatic refresh)
+    // refreshUserStats();
 }
 
 function loadUserActivity() {
     if (!currentUser) return;
     
-    loadViewHistory();
-    loadRatingHistory();
-    loadBehaviorHistory();
-    loadUserPreferences();
+    // Load all activities in parallel with proper loading states
+    Promise.all([
+        loadViewHistory(),
+        loadRatingHistory(),
+        loadBehaviorHistory(),
+        loadUserPreferences()
+    ]).catch(error => {
+        console.error('Error loading user activities:', error);
+        showNotification('Error loading some user activities', 'warning');
+    });
 }
 
 function loadViewHistory() {
-    fetch(`/api/users/${currentUser.user_id}/views`)
+    const container = document.getElementById('viewHistory');
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Loading view history...</div>';
+    
+    return fetch(`/api/users/${currentUser.user_id}/enhanced-views?limit=20`)
         .then(response => response.json())
         .then(data => {
-            const container = document.getElementById('viewHistory');
-            
-            if (data.success && data.views.length > 0) {
-                // Load laptop details for each view
-                const laptopPromises = data.views.map(view => 
-                    fetch(`/api/laptop/${view.laptop_id}`)
-                        .then(response => response.json())
-                        .then(laptopData => ({ view, laptop: laptopData }))
-                        .catch(() => ({ view, laptop: null }))
-                );
+            if (data.success && data.viewed_products && data.viewed_products.length > 0) {
+                console.log(`Loading ${data.viewed_products.length} viewed products for user ${currentUser.user_id}`);
                 
-                Promise.all(laptopPromises)
-                    .then(results => {
-                        container.innerHTML = results.map(({ view, laptop }) => `
-                            <div class="laptop-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1">
-                                            ${laptop && laptop.success ? laptop.laptop.title_y || `Laptop ID: ${view.laptop_id}` : `Laptop ID: ${view.laptop_id}`}
-                                        </h6>
-                                        ${laptop && laptop.success ? `
-                                            <div class="row">
+                // Display enhanced view history with laptop details already included
+                container.innerHTML = data.viewed_products.map(product => `
+                    <div class="laptop-card mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h5 class="card-title mb-2">
+                                            <i class="fas fa-laptop text-primary me-2"></i>
+                                            ${product.laptop_title || `Laptop ID: ${product.laptop_id}`}
+                                        </h5>
+                                        ${product.laptop_title ? `
+                                            <div class="row mb-3">
                                                 <div class="col-md-6">
-                                                    <small class="text-muted">
-                                                        <strong>Brand:</strong> ${laptop.laptop.brand || 'Unknown'}<br>
-                                                        <strong>Price:</strong> MYR ${laptop.laptop.price_myr || 'N/A'}<br>
-                                                        <strong>Rating:</strong> ${laptop.laptop.average_rating || 'N/A'}/5
-                                                    </small>
+                                                    <div class="spec-item">
+                                                        <i class="fas fa-tag text-success me-1"></i>
+                                                        <strong>Brand:</strong> ${product.laptop_brand || 'Unknown'}
+                                                    </div>
+                                                    <div class="spec-item">
+                                                        <i class="fas fa-dollar-sign text-success me-1"></i>
+                                                        <strong>Price:</strong> MYR ${product.laptop_price || 'N/A'}
+                                                    </div>
+                                                    <div class="spec-item">
+                                                        <i class="fas fa-star text-warning me-1"></i>
+                                                        <strong>Rating:</strong> ${product.laptop_rating || 'N/A'}/5
+                                                    </div>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <small class="text-muted">
-                                                        <strong>Views:</strong> ${view.view_count} time(s)<br>
-                                                        <strong>First viewed:</strong> ${new Date(view.first_viewed).toLocaleDateString()}<br>
-                                                        <strong>Last viewed:</strong> ${new Date(view.last_viewed).toLocaleString()}
-                                                    </small>
+                                                    ${product.laptop_image ? `
+                                                        <div class="laptop-image">
+                                                            <img src="${product.laptop_image}" alt="${product.laptop_title}" class="img-fluid rounded" style="max-height: 100px;">
+                                                        </div>
+                                                    ` : ''}
                                                 </div>
                                             </div>
-                                        ` : `
-                                            <small class="text-muted">
-                                                Viewed ${view.view_count} time(s) | 
-                                                Last viewed: ${new Date(view.last_viewed).toLocaleString()}
-                                            </small>
-                                        `}
+                                        ` : ''}
+                                        <div class="view-stats">
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="stat-badge">
+                                                        <i class="fas fa-eye text-primary"></i>
+                                                        <span class="ms-1">${product.view_count} view${product.view_count !== 1 ? 's' : ''}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="stat-badge">
+                                                        <i class="fas fa-calendar-alt text-info"></i>
+                                                        <span class="ms-1">First: ${new Date(product.first_viewed).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="stat-badge">
+                                                        <i class="fas fa-clock text-success"></i>
+                                                        <span class="ms-1">Last: ${new Date(product.last_viewed).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="ml-3">
-                                        <a href="/laptop/${view.laptop_id}" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye"></i> View Again
-                                        </a>
+                                    <div class="col-md-4 text-center">
+                                        <div class="laptop-actions">
+                                            <a href="/laptop/${product.laptop_id}" class="btn btn-primary btn-sm mb-2 w-100">
+                                                <i class="fas fa-eye"></i> View Again
+                                            </a>
+                                            <button class="btn btn-outline-secondary btn-sm w-100" onclick="removeFromHistory(${product.laptop_id})">
+                                                <i class="fas fa-trash"></i> Remove
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        `).join('');
-                    })
-                    .catch(error => {
-                        console.error('Error loading laptop details:', error);
-                        // Fallback to simple display
-                        container.innerHTML = data.views.map(view => `
-                            <div class="laptop-item">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h6>Laptop ID: ${view.laptop_id}</h6>
-                                        <small class="text-muted">
-                                            Viewed ${view.view_count} time(s) | 
-                                            Last viewed: ${new Date(view.last_viewed).toLocaleString()}
-                                        </small>
-                                    </div>
-                                    <a href="/laptop/${view.laptop_id}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-eye"></i> View Again
-                                    </a>
-                                </div>
-                            </div>
-                        `).join('');
-                    });
+                        </div>
+                    </div>
+                `).join('');
             } else {
                 container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-eye-slash"></i><br>No view history found.</div>';
             }
         })
         .catch(error => {
             console.error('Error loading view history:', error);
-            document.getElementById('viewHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading view history.</div>';
+            container.innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading view history.</div>';
+            throw error; // Re-throw to be caught by Promise.all
         });
 }
 
 function loadRatingHistory() {
-    fetch(`/api/users/${currentUser.user_id}/ratings`)
-        .then(response => response.json())
+    const container = document.getElementById('ratingHistory');
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Loading rating history...</div>';
+    
+    return fetch(`/api/users/${currentUser.user_id}/enhanced-ratings?limit=20`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            const container = document.getElementById('ratingHistory');
-            
-            if (data.success && data.ratings.length > 0) {
-                // Load laptop details for each rating
-                const laptopPromises = data.ratings.map(rating => 
-                    fetch(`/api/laptop/${rating.laptop_id}`)
-                        .then(response => response.json())
-                        .then(laptopData => ({ rating, laptop: laptopData }))
-                        .catch(() => ({ rating, laptop: null }))
-                );
+            if (data.success && data.rating_history && data.rating_history.length > 0) {
+                console.log(`Loading ${data.rating_history.length} ratings for user ${currentUser.user_id}`);
                 
-                Promise.all(laptopPromises)
-                    .then(results => {
-                        container.innerHTML = results.map(({ rating, laptop }) => `
-                            <div class="laptop-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1">
-                                            ${laptop && laptop.success ? laptop.laptop.title_y || `Laptop ID: ${rating.laptop_id}` : `Laptop ID: ${rating.laptop_id}`}
-                                        </h6>
-                                        <div class="rating-stars mb-2">
-                                            ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
-                                            <span class="ml-2 font-weight-bold">${rating.rating}/5</span>
-                                        </div>
-                                        ${rating.comment ? `
-                                            <div class="comment-box p-2 bg-light rounded mb-2">
-                                                <small class="text-muted">Your review:</small>
-                                                <p class="mb-0">"${rating.comment}"</p>
-                                            </div>
-                                        ` : ''}
+                // Display enhanced rating history with laptop details already included
+                container.innerHTML = data.rating_history.map(rating => `
+                            <div class="rating-card mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body">
                                         <div class="row">
-                                            <div class="col-md-6">
-                                                <small class="text-muted">
-                                                    <strong>Brand:</strong> ${laptop && laptop.success ? laptop.laptop.brand || 'Unknown' : 'Unknown'}<br>
-                                                    <strong>Price:</strong> MYR ${laptop && laptop.success ? laptop.laptop.price_myr || 'N/A' : 'N/A'}<br>
-                                                    <strong>Overall Rating:</strong> ${laptop && laptop.success ? laptop.laptop.average_rating || 'N/A' : 'N/A'}/5
-                                                </small>
+                                            <div class="col-md-8">
+                                                <h5 class="card-title mb-2">
+                                                    <i class="fas fa-laptop text-primary me-2"></i>
+                                                    ${rating.laptop_title || `Laptop ID: ${rating.laptop_id}`}
+                                                </h5>
+                                                
+                                                <!-- User Rating Display -->
+                                                <div class="user-rating-section mb-3">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <span class="me-2"><strong>Your Rating:</strong></span>
+                                                        <div class="rating-display">
+                                                            ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
+                                                            <span class="rating-value ms-2">${rating.rating}/5</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="rating-date">
+                                                        <i class="fas fa-calendar-alt text-muted me-1"></i>
+                                                        <small class="text-muted">Rated on ${new Date(rating.timestamp).toLocaleDateString()} at ${new Date(rating.timestamp).toLocaleTimeString()}</small>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- User Review/Comment -->
+                                                ${rating.comment ? `
+                                                    <div class="user-review mb-3">
+                                                        <h6 class="review-title">
+                                                            <i class="fas fa-comment text-info me-1"></i>
+                                                            Your Review
+                                                        </h6>
+                                                        <div class="review-content">
+                                                            <p class="mb-0">"${rating.comment}"</p>
+                                                        </div>
+                                                    </div>
+                                                ` : ''}
+                                                
+                                                <!-- Laptop Details -->
+                                                ${rating.laptop_title ? `
+                                                    <div class="laptop-details">
+                                                        <h6 class="details-title">
+                                                            <i class="fas fa-info-circle text-success me-1"></i>
+                                                            Laptop Details
+                                                        </h6>
+                                                        <div class="row">
+                                                            <div class="col-md-6">
+                                                                <div class="detail-item">
+                                                                    <i class="fas fa-tag text-success me-1"></i>
+                                                                    <strong>Brand:</strong> ${rating.laptop_brand || 'Unknown'}
+                                                                </div>
+                                                                <div class="detail-item">
+                                                                    <i class="fas fa-dollar-sign text-success me-1"></i>
+                                                                    <strong>Price:</strong> MYR ${rating.laptop_price || 'N/A'}
+                                                                </div>
+                                                                <div class="detail-item">
+                                                                    <i class="fas fa-star text-warning me-1"></i>
+                                                                    <strong>Overall Rating:</strong> ${rating.laptop_rating || 'N/A'}/5
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                ${rating.laptop_image ? `
+                                                                    <div class="laptop-image">
+                                                                        <img src="${rating.laptop_image}" alt="${rating.laptop_title}" class="img-fluid rounded" style="max-height: 100px;">
+                                                                    </div>
+                                                                ` : ''}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ` : `
+                                                    <div class="alert alert-info">
+                                                        <i class="fas fa-info-circle me-1"></i>
+                                                        <small>Laptop details not available. Click "View Laptop" to see full details.</small>
+                                                    </div>
+                                                `}
                                             </div>
-                                            <div class="col-md-6">
-                                                <small class="text-muted">
-                                                    <strong>Your Rating:</strong> ${rating.rating}/5<br>
-                                                    <strong>Rated on:</strong> ${new Date(rating.timestamp).toLocaleDateString()}<br>
-                                                    <strong>Time:</strong> ${new Date(rating.timestamp).toLocaleTimeString()}
-                                                </small>
+                                            
+                                            <!-- Actions Column -->
+                                            <div class="col-md-4 text-center">
+                                                <div class="rating-actions">
+                                                    <a href="/laptop/${rating.laptop_id}" class="btn btn-primary btn-sm mb-2 w-100">
+                                                        <i class="fas fa-eye"></i> View Laptop
+                                                    </a>
+                                                    <button class="btn btn-outline-warning btn-sm mb-2 w-100" onclick="editRating(${rating.laptop_id}, ${rating.rating}, '${rating.comment || ''}')">
+                                                        <i class="fas fa-edit"></i> Edit Rating
+                                                    </button>
+                                                    <button class="btn btn-outline-danger btn-sm w-100" onclick="deleteRating(${rating.laptop_id})">
+                                                        <i class="fas fa-trash"></i> Delete Rating
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div class="ml-3">
-                                        <a href="/laptop/${rating.laptop_id}" class="btn btn-sm btn-outline-primary mb-1">
-                                            <i class="fas fa-eye"></i> View Laptop
-                                        </a>
-                                        <br>
-                                        <button class="btn btn-sm btn-outline-secondary" onclick="editRating(${rating.laptop_id}, ${rating.rating}, '${rating.comment || ''}')">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </button>
                                     </div>
                                 </div>
                             </div>
                         `).join('');
-                    })
-                    .catch(error => {
-                        console.error('Error loading laptop details:', error);
-                        // Fallback to simple display
-                        container.innerHTML = data.ratings.map(rating => `
-                            <div class="laptop-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h6>Laptop ID: ${rating.laptop_id}</h6>
-                                        <div class="rating-stars">
-                                            ${'★'.repeat(Math.floor(rating.rating))}${'☆'.repeat(5 - Math.floor(rating.rating))}
-                                            <span class="ml-2">${rating.rating}/5</span>
-                                        </div>
-                                        ${rating.comment ? `<p class="mt-2 mb-0">"${rating.comment}"</p>` : ''}
-                                        <small class="text-muted">
-                                            Rated on: ${new Date(rating.timestamp).toLocaleString()}
-                                        </small>
-                                    </div>
-                                    <a href="/laptop/${rating.laptop_id}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-eye"></i> View Laptop
-                                    </a>
-                                </div>
-                            </div>
-                        `).join('');
-                    });
             } else {
                 container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-star"></i><br>No ratings found.</div>';
             }
         })
         .catch(error => {
             console.error('Error loading rating history:', error);
-            document.getElementById('ratingHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading rating history.</div>';
+            container.innerHTML = `
+                <div class="text-center text-danger">
+                    <i class="fas fa-exclamation-triangle"></i><br>
+                    Error loading rating history.<br>
+                    <small class="text-muted">Please try refreshing the page or contact support if the problem persists.</small>
+                </div>
+            `;
+            throw error; // Re-throw to be caught by Promise.all
         });
 }
 
 let allBehaviors = []; // Store all behaviors for filtering
 
 function loadBehaviorHistory() {
-    fetch(`/api/users/${currentUser.user_id}/behavior`)
+    const container = document.getElementById('behaviorHistory');
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin"></i> Loading activity history...</div>';
+    
+    return fetch(`/api/users/${currentUser.user_id}/behavior`)
         .then(response => response.json())
         .then(data => {
-            const container = document.getElementById('behaviorHistory');
-            
             if (data.success && data.behaviors.length > 0) {
                 allBehaviors = data.behaviors;
                 displayBehaviors(allBehaviors);
@@ -961,7 +1291,8 @@ function loadBehaviorHistory() {
         })
         .catch(error => {
             console.error('Error loading behavior history:', error);
-            document.getElementById('behaviorHistory').innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading activity history.</div>';
+            container.innerHTML = '<div class="text-center text-danger"><i class="fas fa-exclamation-triangle"></i><br>Error loading activity history.</div>';
+            throw error; // Re-throw to be caught by Promise.all
         });
 }
 
@@ -1058,33 +1389,35 @@ function filterBehavior(type) {
 }
 
 function loadUserPreferences() {
-    if (currentUser.preferences) {
-        // Budget & Performance
-        document.getElementById('prefBudgetMin').value = currentUser.preferences.budget_min || '';
-        document.getElementById('prefBudgetMax').value = currentUser.preferences.budget_max || '';
-        document.getElementById('prefPriority').value = currentUser.preferences.priority || '';
-        
-        // Brand & Specifications
-        document.getElementById('prefBrand').value = currentUser.preferences.brand || '';
-        document.getElementById('prefProcessor').value = currentUser.preferences.processor || '';
-        
-        // Use Case & Requirements
-        document.getElementById('prefUseCase').value = currentUser.preferences.use_case || '';
-        document.getElementById('prefRAM').value = currentUser.preferences.ram_min || '';
-        
-        // Display & Portability
-        document.getElementById('prefScreenSize').value = currentUser.preferences.screen_size || '';
-        document.getElementById('prefWeight').value = currentUser.preferences.weight_preference || '';
-        
-        // Additional Preferences
-        document.getElementById('prefGPU').value = currentUser.preferences.gpu_requirement || '';
-        document.getElementById('prefStorage').value = currentUser.preferences.storage_type || '';
-        
-        // Notification Preferences
-        document.getElementById('prefEmailNotifications').checked = currentUser.preferences.email_notifications || false;
-        document.getElementById('prefPriceAlerts').checked = currentUser.preferences.price_alerts || false;
-        document.getElementById('prefNewLaptops').checked = currentUser.preferences.new_laptop_notifications || false;
-    }
+    return Promise.resolve().then(() => {
+        if (currentUser.preferences) {
+            // Budget & Performance
+            document.getElementById('prefBudgetMin').value = currentUser.preferences.budget_min || '';
+            document.getElementById('prefBudgetMax').value = currentUser.preferences.budget_max || '';
+            document.getElementById('prefPriority').value = currentUser.preferences.priority || '';
+            
+            // Brand & Specifications
+            document.getElementById('prefBrand').value = currentUser.preferences.brand || '';
+            document.getElementById('prefProcessor').value = currentUser.preferences.processor || '';
+            
+            // Use Case & Requirements
+            document.getElementById('prefUseCase').value = currentUser.preferences.use_case || '';
+            document.getElementById('prefRAM').value = currentUser.preferences.ram_min || '';
+            
+            // Display & Portability
+            document.getElementById('prefScreenSize').value = currentUser.preferences.screen_size || '';
+            document.getElementById('prefWeight').value = currentUser.preferences.weight_preference || '';
+            
+            // Additional Preferences
+            document.getElementById('prefGPU').value = currentUser.preferences.gpu_requirement || '';
+            document.getElementById('prefStorage').value = currentUser.preferences.storage_type || '';
+            
+            // Notification Preferences
+            document.getElementById('prefEmailNotifications').checked = currentUser.preferences.email_notifications || false;
+            document.getElementById('prefPriceAlerts').checked = currentUser.preferences.price_alerts || false;
+            document.getElementById('prefNewLaptops').checked = currentUser.preferences.new_laptop_notifications || false;
+        }
+    });
 }
 
 function savePreferences(event) {
@@ -1287,6 +1620,117 @@ function logoutUser() {
     });
 }
 
+function refreshUserStats() {
+    if (!currentUser) return;
+    
+    // Show loading state
+    const refreshBtn = document.getElementById('refreshStats');
+    const originalText = refreshBtn.innerHTML;
+    refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+    refreshBtn.disabled = true;
+    
+    console.log('Refreshing user stats for user:', currentUser.user_id);
+    
+    // Fetch updated user data
+    fetch(`/api/users/${currentUser.user_id}`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Refresh response:', data);
+            if (data.success) {
+                const oldStats = {
+                    ratings: currentUser.total_ratings,
+                    views: currentUser.total_views,
+                    comments: currentUser.total_comments
+                };
+                
+                currentUser = data.user;
+                
+                const newStats = {
+                    ratings: currentUser.total_ratings,
+                    views: currentUser.total_views,
+                    comments: currentUser.total_comments
+                };
+                
+                console.log('Stats comparison:', { old: oldStats, new: newStats });
+                
+                // Update display without calling displayCurrentUser (to avoid recursion)
+                document.getElementById('totalViews').textContent = currentUser.total_views;
+                document.getElementById('totalRatings').textContent = currentUser.total_ratings;
+                document.getElementById('totalComments').textContent = currentUser.total_comments;
+                
+                // Update global variables
+                window.currentUser = data.user;
+                
+                // Show notification with actual stats
+                showNotification(`Stats refreshed! Ratings: ${currentUser.total_ratings}, Views: ${currentUser.total_views}, Comments: ${currentUser.total_comments}`, 'success');
+            } else {
+                showNotification('Error refreshing statistics: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing user stats:', error);
+            showNotification('Error refreshing statistics', 'error');
+        })
+        .finally(() => {
+            // Restore button state
+            refreshBtn.innerHTML = originalText;
+            refreshBtn.disabled = false;
+        });
+}
+
+function removeFromHistory(laptopId) {
+    if (!currentUser) return;
+    
+    if (confirm('Are you sure you want to remove this laptop from your view history?')) {
+        fetch(`/api/users/${currentUser.user_id}/views/${laptopId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Laptop removed from view history!', 'success');
+                loadViewHistory(); // Reload the view history
+            } else {
+                showNotification('Error removing laptop: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error removing laptop from history:', error);
+            showNotification('Error removing laptop from history', 'error');
+        });
+    }
+}
+
+function deleteRating(laptopId) {
+    if (!currentUser) return;
+    
+    if (confirm('Are you sure you want to delete this rating? This action cannot be undone.')) {
+        fetch(`/api/users/${currentUser.user_id}/ratings/${laptopId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Rating deleted successfully!', 'success');
+                loadRatingHistory(); // Reload the rating history
+                refreshUserStats(); // Refresh user statistics
+            } else {
+                showNotification('Error deleting rating: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error deleting rating:', error);
+            showNotification('Error deleting rating', 'error');
+        });
+    }
+}
+
 function switchUser() {
     // Hide current user info and show user selection interface
     document.getElementById('currentUserInfo').style.display = 'none';
@@ -1299,5 +1743,7 @@ function switchUser() {
     
     showNotification('Please select a different user', 'info');
 }
+
+
 </script>
 {% endblock %}

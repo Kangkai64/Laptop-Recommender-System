@@ -1281,6 +1281,7 @@ class LaptopDataPreprocessor:
         self.df_laptop = df_laptop_normalized
         self.df_rating = df_rating_normalized
         
+        
         # Save processed data to cache
         self.save_cached_data(df_laptop_normalized, df_rating_normalized)
         
@@ -1480,6 +1481,7 @@ class LaptopDataPreprocessor:
         
         logger.info("Basic benchmark scores added successfully")
         return df_benchmarks
+
 
     def get_separated_data_summary(self) -> Dict:
         """

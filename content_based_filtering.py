@@ -631,6 +631,7 @@ class ContentBasedFiltering:
                     'brand': laptop_data.get('brand', f"Brand_{laptop_data['brand_encoded']}"),  # Use actual brand name if available
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Fix: use average_rating instead of rating
+                    'rating_number': laptop_data.get('rating_number', 0),  # Include rating count
                     'similarity_score': normalized_similarity,
                     'features': laptop_data['features_clean'],
                     'images_y': laptop_data.get('images_y'),  # Include media columns
@@ -705,6 +706,7 @@ class ContentBasedFiltering:
                     'brand': laptop_data.get('brand', f"Brand_{laptop_data['brand_encoded']}"),  # Use actual brand name if available
                     'price_myr': laptop_data['price_myr'],
                     'average_rating': laptop_data['average_rating'],  # Changed from 'rating' to 'average_rating'
+                    'rating_number': laptop_data.get('rating_number', 0),  # Include rating count
                     'similarity_score': normalized_similarity,
                     'features': laptop_data['features_clean'],
                     'images_y': laptop_data.get('images_y'),  # Include media columns
@@ -1024,8 +1026,8 @@ class ContentBasedFiltering:
         return 1.0 - avg_similarity
     
     def save_model(self, filepath: str) -> None:
-        """Save the trained model and parameters."""
-        import pickle
+        """Save the trained model and parameters using joblib for optimized serialization."""
+        from joblib import dump
         
         try:
             model_data = {
@@ -1034,37 +1036,48 @@ class ContentBasedFiltering:
                 'feature_names': self.feature_names,
                 'tfidf_vectorizer': self.tfidf_vectorizer,
                 'scaler': self.scaler,
-                'config': self.config
+                'config': self.config,
+                'df_laptop_shape': self.df_laptop.shape if self.df_laptop is not None else None,
+                'df_rating_shape': self.df_rating.shape if self.df_rating is not None else None
             }
             
-            with open(filepath, 'wb') as f:
-                pickle.dump(model_data, f)
+            # Use joblib for efficient serialization of scikit-learn objects
+            dump(model_data, filepath, compress=3)  # compress=3 for good compression/speed balance
             
-            logger.info(f"Model saved to {filepath}")
+            logger.info(f"Content-based model saved to {filepath}")
             
         except Exception as e:
-            logger.error(f"Error saving model: {str(e)}")
+            logger.error(f"Error saving content-based model: {str(e)}")
             raise
     
     def load_model(self, filepath: str) -> None:
-        """Load a previously saved model."""
-        import pickle
+        """Load a previously saved model using joblib."""
+        from joblib import load
         
         try:
-            with open(filepath, 'rb') as f:
-                model_data = pickle.load(f)
+            model_data = load(filepath)
+            
+            # Validate model data structure
+            required_keys = ['feature_matrix', 'similarity_matrix', 'feature_names', 'config']
+            for key in required_keys:
+                if key not in model_data:
+                    raise ValueError(f"Missing required key '{key}' in saved model")
             
             self.feature_matrix = model_data['feature_matrix']
             self.similarity_matrix = model_data['similarity_matrix']
             self.feature_names = model_data['feature_names']
-            self.tfidf_vectorizer = model_data['tfidf_vectorizer']
-            self.scaler = model_data['scaler']
+            self.tfidf_vectorizer = model_data.get('tfidf_vectorizer')
+            self.scaler = model_data.get('scaler')
             self.config = model_data['config']
             
-            logger.info(f"Model loaded from {filepath}")
+            # Log model information
+            logger.info(f"Content-based model loaded from {filepath}")
+            logger.info(f"Feature matrix shape: {self.feature_matrix.shape}")
+            logger.info(f"Similarity matrix shape: {self.similarity_matrix.shape}")
+            logger.info(f"Number of features: {len(self.feature_names)}")
             
         except Exception as e:
-            logger.error(f"Error loading model: {str(e)}")
+            logger.error(f"Error loading content-based model: {str(e)}")
             raise
 
 

@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import logging
 import os
+import sqlite3
 from datetime import datetime
 import json
 from typing import Dict, List, Optional, Any
@@ -322,11 +323,26 @@ def normalize_recommendations(recommendations: List[Dict]) -> List[Dict]:
         # Title
         if 'title_y' not in r and 'title' in r:
             r['title_y'] = r['title']
-        # Rating
+        # Rating - preserve existing ratings and map between rating/average_rating
         if 'average_rating' not in r and 'rating' in r:
             r['average_rating'] = r['rating']
-        if 'average_rating' not in r:
+        elif 'rating' not in r and 'average_rating' in r:
+            r['rating'] = r['average_rating']
+        # Only set to 0.0 if neither rating nor average_rating exists
+        if 'average_rating' not in r and 'rating' not in r:
             r['average_rating'] = 0.0
+            r['rating'] = 0.0
+        
+        # Rating count - map rating_number to rating_count for template
+        if 'rating_count' not in r and 'rating_number' in r:
+            # Since rating_number is normalized, we'll estimate the count
+            # This is a rough estimation - in a real system, you'd want to preserve the raw count
+            normalized_count = r['rating_number']
+            # Estimate based on typical laptop review counts (this is a rough approximation)
+            estimated_count = max(1, int(normalized_count * 1000))  # Scale factor
+            r['rating_count'] = estimated_count
+        elif 'rating_count' not in r:
+            r['rating_count'] = 0
         # Brand
         if 'brand' not in r and 'brand_encoded' in r:
             r['brand'] = f"Brand_{r['brand_encoded']}"
@@ -424,43 +440,15 @@ def recommend():
         try:
             if algorithm == 'content_based':
                 # Use content-based filtering
-                query = {
-                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
-                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
-                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-                    'min_ram': preferences['ram_min'],
-                    'min_storage': preferences['storage_min'],
-                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
-                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
-                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
-                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
-                    'use_case': preferences['use_case'],
-                    'priority': preferences['priority']
-                }
+                query = convert_preferences_to_query(preferences)
                 recommendations = recommender_system.get_content_based_recommendations(
                     preferences=query, n_recommendations=50
                 )
-                # Add method identifier
-                for rec in recommendations:
-                    rec['method'] = 'content_based'
-                recommendations = normalize_recommendations(recommendations)
-                logger.info(f"Generated {len(recommendations)} content-based recommendations")
+                recommendations = process_recommendations(recommendations, 'content_based')
                 
             elif algorithm == 'collaborative':
                 # Convert preferences to system format for collaborative filtering
-                query = {
-                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
-                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
-                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-                    'min_ram': preferences['ram_min'],
-                    'min_storage': preferences['storage_min'],
-                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
-                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
-                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
-                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
-                    'use_case': preferences['use_case'],
-                    'priority': preferences['priority']
-                }
+                query = convert_preferences_to_query(preferences)
                 
                 # Use enhanced collaborative filtering if user is logged in
                 if user_id and user_manager:
@@ -468,47 +456,45 @@ def recommend():
                         recommendations = recommender_system.collaborative_filter.get_enhanced_recommendations(
                             user_id=user_id, preferences=query, n_recommendations=50
                         )
-                        logger.info(f"Generated {len(recommendations)} enhanced collaborative recommendations for user {user_id}")
+                        recommendations = process_recommendations(recommendations, 'enhanced_collaborative', user_id)
                     except Exception as e:
                         logger.warning(f"Enhanced collaborative filtering failed for user {user_id}: {e}")
                         # Fallback to popular recommendations
                         recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
                             preferences=query, n_recommendations=50
                         )
-                        logger.info(f"Using fallback popular recommendations: {len(recommendations)} items")
+                        recommendations = process_recommendations(recommendations, 'popular_collaborative')
                 else:
                     # Use automatic popular recommendations for anonymous users
                     recommendations = recommender_system.collaborative_filter.get_popular_recommendations(
                         preferences=query, n_recommendations=50
                     )
-                    logger.info(f"Generated {len(recommendations)} popular recommendations for anonymous user")
-                
-                recommendations = normalize_recommendations(recommendations)
+                    recommendations = process_recommendations(recommendations, 'popular_collaborative')
                 
             elif algorithm == 'hybrid':
                 # Convert preferences to system format for hybrid
-                query = {
-                    'budget_range': (preferences['budget_min'], preferences['budget_max']),
-                    'brand_preference': preferences['brand'] if preferences['brand'] else None,
-                    'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-                    'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
-                    'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
-                    'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
-                    'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
-                    'min_ram': preferences['ram_min'],
-                    'min_storage': preferences['storage_min'],
-                    'use_case': preferences['use_case'],
-                    'priority': preferences['priority']
-                }
-                # Use automatic hybrid recommendations (no user_id required)
-                recommendations = recommender_system.get_hybrid_recommendations_auto(
-                    preferences=query, n_recommendations=50
-                )
-                # Add method identifier
-                for rec in recommendations:
-                    rec['method'] = 'hybrid'
-                recommendations = normalize_recommendations(recommendations)
-                logger.info(f"Generated {len(recommendations)} hybrid recommendations")
+                query = convert_preferences_to_query(preferences)
+                
+                # Use hybrid recommendations with user_id if logged in, otherwise use automatic
+                if user_id and user_manager:
+                    try:
+                        recommendations = recommender_system.get_hybrid_recommendations(
+                            user_id=user_id, preferences=query, n_recommendations=50
+                        )
+                        recommendations = process_recommendations(recommendations, 'hybrid', user_id)
+                    except Exception as e:
+                        logger.warning(f"Hybrid recommendations failed for user {user_id}: {e}")
+                        # Fallback to automatic hybrid recommendations
+                        recommendations = recommender_system.get_hybrid_recommendations_auto(
+                            preferences=query, n_recommendations=50
+                        )
+                        recommendations = process_recommendations(recommendations, 'hybrid_auto')
+                else:
+                    # Use automatic hybrid recommendations for anonymous users
+                    recommendations = recommender_system.get_hybrid_recommendations_auto(
+                        preferences=query, n_recommendations=50
+                    )
+                    recommendations = process_recommendations(recommendations, 'hybrid_auto')
             else:
                 raise Exception(f'Unsupported algorithm: {algorithm}')
             
@@ -623,23 +609,15 @@ def get_content_based_recommendations(preferences: Dict) -> List[Dict]:
         raise Exception("Recommendation system not initialized")
     
     # Convert preferences to system format
-    query = {
-        'budget_range': (preferences['budget_min'], preferences['budget_max']),
-        'brand_preference': preferences['brand'] if preferences['brand'] else None,
-        'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
-        'min_ram': preferences['ram_min'],
-        'min_storage': preferences['storage_min'],
-        'use_case': preferences['use_case'],
-        'priority': preferences['priority']
-    }
+    query = convert_preferences_to_query(preferences)
     
     # Try different recommendation methods
     try:
         # First try content-based recommendations
         recommendations = recommender_system.get_content_based_recommendations(
             preferences=query,
-                n_recommendations=50
-            )
+            n_recommendations=50
+        )
             
         # Process image data for recommendations
         for rec in recommendations:
@@ -702,6 +680,39 @@ def get_content_based_recommendations(preferences: Dict) -> List[Dict]:
             # Final fallback: return sample laptops filtered by budget
             logger.warning(f"Recommendation methods failed, using fallback: {e2}")
             return get_fallback_recommendations(preferences)
+
+def convert_preferences_to_query(preferences: Dict) -> Dict:
+    """Convert form preferences to system query format."""
+    return {
+        'budget_range': (preferences['budget_min'], preferences['budget_max']),
+        'brand_preference': preferences['brand'] if preferences['brand'] else None,
+        'processor_preference': preferences['processor_type'] if preferences['processor_type'] else None,
+        'min_ram': preferences['ram_min'],
+        'min_storage': preferences['storage_min'],
+        'screen_size': preferences['screen_size'] if preferences['screen_size'] else None,
+        'gpu_requirement': preferences['gpu_requirement'] if preferences['gpu_requirement'] else None,
+        'battery_life': preferences['battery_life'] if preferences['battery_life'] else None,
+        'weight_preference': preferences['weight_preference'] if preferences['weight_preference'] else None,
+        'use_case': preferences['use_case'],
+        'priority': preferences['priority']
+    }
+
+def process_recommendations(recommendations: List[Dict], method: str, user_id: str = None) -> List[Dict]:
+    """Process recommendations by adding method identifier and normalizing."""
+    # Add method identifier
+    for rec in recommendations:
+        rec['method'] = method
+    
+    # Normalize recommendations
+    recommendations = normalize_recommendations(recommendations)
+    
+    # Log the results
+    if user_id:
+        logger.info(f"Generated {len(recommendations)} {method} recommendations for user {user_id}")
+    else:
+        logger.info(f"Generated {len(recommendations)} {method} recommendations")
+    
+    return recommendations
 
 def merge_preferences(saved_prefs: Dict, form_prefs: Dict) -> Dict:
     """
@@ -1543,7 +1554,7 @@ def api_list_users():
 
 @app.route('/api/users/search', methods=['GET'])
 def api_search_users():
-    """API endpoint to search users by userID or username."""
+    """API endpoint to search users by userID or username with advanced filtering."""
     try:
         if user_manager is None:
             return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
@@ -1551,55 +1562,115 @@ def api_search_users():
         search_term = request.args.get('q', '').strip()
         limit = int(request.args.get('limit', 50))
         
-        if not search_term:
-            return jsonify({'success': False, 'error': 'Search term is required'}), 400
+        # Get filter parameters
+        min_rating_count = request.args.get('min_rating_count', type=int)
+        max_rating_count = request.args.get('max_rating_count', type=int)
+        min_avg_rating = request.args.get('min_avg_rating', type=float)
+        max_avg_rating = request.args.get('max_avg_rating', type=float)
         
-        # Search in the user database
-        users = user_manager.search_users(search_term, limit)
         users_data = []
         
-        for user in users:
-            users_data.append({
-                'user_id': user.user_id,
-                'username': user.username,
-                'email': user.email,
-                'created_at': user.created_at,
-                'last_active': user.last_active,
-                'total_views': user.total_views,
-                'total_ratings': user.total_ratings,
-                'total_comments': user.total_comments,
-                'is_existing': False
-            })
-        
-        # Also search in existing users from rating dataset
-        if df_rating is not None:
-            existing_users = user_manager.get_existing_users_from_ratings(df_rating)
-            for existing_user in existing_users:
-                # Check if this existing user matches the search term
-                if (search_term.lower() in existing_user['username'].lower() or 
-                    search_term in str(existing_user['user_id_encoded'])):
+        # Search in the user database (only if no filters are applied)
+        if not any([min_rating_count, max_rating_count, min_avg_rating, max_avg_rating]):
+            if search_term:
+                users = user_manager.search_users(search_term, limit)
+                for user in users:
                     users_data.append({
-                        'user_id': f"existing_{existing_user['user_id_encoded']}",
-                        'username': existing_user['username'],
-                        'email': None,
-                        'created_at': existing_user.get('first_rating', ''),
-                        'last_active': existing_user.get('last_rating', ''),
-                        'total_views': 0,
-                        'total_ratings': existing_user['total_ratings'],
-                        'total_comments': 0,
-                        'is_existing': True,
-                        'user_id_encoded': existing_user['user_id_encoded']
+                        'user_id': user.user_id,
+                        'username': user.username,
+                        'email': user.email,
+                        'created_at': user.created_at,
+                        'last_active': user.last_active,
+                        'total_views': user.total_views,
+                        'total_ratings': user.total_ratings,
+                        'total_comments': user.total_comments,
+                        'is_existing': False
                     })
+        
+        # Search in existing users from rating dataset with filters
+        existing_users = user_manager.get_existing_users_from_ratings(
+            df_rating=df_rating,
+            search_term=search_term if search_term else None,
+            min_rating_count=min_rating_count,
+            max_rating_count=max_rating_count,
+            min_avg_rating=min_avg_rating,
+            max_avg_rating=max_avg_rating,
+            limit=limit
+        )
+        
+        for existing_user in existing_users:
+            users_data.append({
+                'user_id': f"existing_{existing_user['user_id_encoded']}",
+                'username': existing_user['username'],
+                'email': None,
+                'created_at': existing_user.get('first_rating', ''),
+                'last_active': existing_user.get('last_rating', ''),
+                'total_views': 0,
+                'total_ratings': existing_user['total_ratings'],
+                'total_comments': 0,
+                'is_existing': True,
+                'user_id_encoded': existing_user['user_id_encoded'],
+                'avg_rating': existing_user.get('avg_rating', 0.0)
+            })
         
         return jsonify({
             'success': True,
             'users': users_data,
             'search_term': search_term,
+            'filters': {
+                'min_rating_count': min_rating_count,
+                'max_rating_count': max_rating_count,
+                'min_avg_rating': min_avg_rating,
+                'max_avg_rating': max_avg_rating
+            },
             'total_found': len(users_data)
         })
         
     except Exception as e:
         logger.error(f"Error searching users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/rating-distribution', methods=['GET'])
+def api_get_rating_distribution():
+    """API endpoint to get rating count distribution."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        distribution = user_manager.get_rating_count_distribution()
+        
+        return jsonify({
+            'success': True,
+            'distribution': distribution
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting rating distribution: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id_encoded>/detailed-stats', methods=['GET'])
+def api_get_user_detailed_stats(user_id_encoded):
+    """API endpoint to get detailed statistics for a specific user."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        # Remove 'existing_' prefix if present
+        if user_id_encoded.startswith('existing_'):
+            user_id_encoded = user_id_encoded[9:]
+        
+        stats = user_manager.get_user_detailed_stats(user_id_encoded)
+        
+        if not stats:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user detailed stats: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/users', methods=['POST'])
@@ -1669,6 +1740,16 @@ def api_get_user(user_id):
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
         
+        # Recalculate stats to ensure accuracy
+        logger.info(f"Getting user {user_id}, recalculating stats...")
+        recalculated_stats = user_manager.recalculate_user_stats(user_id)
+        logger.info(f"Recalculated stats for user {user_id}: {recalculated_stats}")
+        
+        # Update the user object with recalculated stats
+        user.total_ratings = recalculated_stats['total_ratings']
+        user.total_views = recalculated_stats['total_views']
+        user.total_comments = recalculated_stats['total_comments']
+        
         # Store current user in session
         session['current_user'] = {
             'user_id': user.user_id,
@@ -1719,6 +1800,54 @@ def api_get_user_views(user_id):
         logger.error(f"Error getting user views: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/laptop/<int:laptop_id>', methods=['GET'])
+def api_get_laptop(laptop_id):
+    """API endpoint to get laptop details by ID."""
+    try:
+        if recommender_system is None:
+            return jsonify({'success': False, 'error': 'Recommender system not initialized'}), 500
+        
+        # Get laptop data
+        laptop = recommender_system.get_laptop_by_id(laptop_id)
+        
+        if not laptop:
+            return jsonify({'success': False, 'error': 'Laptop not found'}), 404
+        
+        # Map brand ID to actual brand name if needed
+        if laptop and 'brand' in laptop:
+            laptop['brand'] = recommender_system.preprocessor.brand_mapping.get(
+                laptop['brand'], 
+                laptop['brand']
+            )
+        
+        # Extract and process images
+        laptop['images'] = extract_image_urls(laptop.get('images_y'))
+        
+        # Convert numpy arrays and other non-serializable objects to Python types
+        def convert_to_serializable(obj):
+            if hasattr(obj, 'tolist'):  # numpy array
+                return obj.tolist()
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
+            elif isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(item) for item in obj]
+            else:
+                return obj
+        
+        # Clean the laptop data
+        laptop_clean = convert_to_serializable(laptop)
+        
+        return jsonify({
+            'success': True,
+            'laptop': laptop_clean
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting laptop {laptop_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/users/<user_id>/ratings', methods=['GET'])
 def api_get_user_ratings(user_id):
     """API endpoint to get user's rating history."""
@@ -1726,11 +1855,43 @@ def api_get_user_ratings(user_id):
         if user_manager is None:
             return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
         
+        # Check if this is an existing user from Amazon dataset
+        if user_id.startswith('existing_'):
+            # Extract the original user_id_encoded
+            user_id_encoded = user_id[9:]  # Remove 'existing_' prefix
+            
+            # Try to get ratings from Amazon dataset first
+            try:
+                from huggingface_sql_client import create_hf_sql_client
+                hf_client = create_hf_sql_client()
+                ratings = hf_client.get_user_ratings(user_id_encoded, limit=50)
+                
+                logger.info(f"Retrieved {len(ratings)} ratings from Amazon dataset for user {user_id}")
+                
+                return jsonify({
+                    'success': True,
+                    'ratings': ratings,
+                    'count': len(ratings),
+                    'user_id': user_id,
+                    'source': 'amazon_dataset'
+                })
+                
+            except Exception as e:
+                logger.warning(f"Failed to get Amazon ratings for user {user_id}: {e}")
+                # Fall through to local database
+        
+        # Fallback to local database for regular users
         ratings = user_manager.get_user_ratings(user_id, limit=50)
+        
+        # Add debug information
+        logger.info(f"Retrieved {len(ratings)} ratings from local database for user {user_id}")
         
         return jsonify({
             'success': True,
-            'ratings': ratings
+            'ratings': ratings,
+            'count': len(ratings),
+            'user_id': user_id,
+            'source': 'local_database'
         })
         
     except Exception as e:
@@ -1767,6 +1928,183 @@ def api_get_user_rating_for_laptop(user_id, laptop_id):
         logger.error(f"Error getting user rating for laptop: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/users/<user_id>/enhanced-views', methods=['GET'])
+def api_get_enhanced_user_views(user_id):
+    """API endpoint to get user's enhanced view history with laptop details."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        limit = request.args.get('limit', 50, type=int)
+        viewed_products = user_manager.get_enhanced_user_views(user_id, limit)
+        
+        # Convert dataclass objects to dictionaries for JSON serialization
+        views_data = []
+        for product in viewed_products:
+            views_data.append({
+                'laptop_id': product.laptop_id,
+                'view_count': product.view_count,
+                'first_viewed': product.first_viewed,
+                'last_viewed': product.last_viewed,
+                'laptop_title': product.laptop_title,
+                'laptop_brand': product.laptop_brand,
+                'laptop_price': product.laptop_price,
+                'laptop_rating': product.laptop_rating,
+                'laptop_image': product.laptop_image
+            })
+        
+        return jsonify({
+            'success': True,
+            'viewed_products': views_data,
+            'count': len(views_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting enhanced user views: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/enhanced-ratings', methods=['GET'])
+def api_get_enhanced_user_ratings(user_id):
+    """API endpoint to get user's enhanced rating history with laptop details."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        limit = request.args.get('limit', 50, type=int)
+        rating_history = user_manager.get_enhanced_user_ratings(user_id, limit)
+        
+        # Convert dataclass objects to dictionaries for JSON serialization
+        ratings_data = []
+        for rating in rating_history:
+            ratings_data.append({
+                'laptop_id': rating.laptop_id,
+                'rating': rating.rating,
+                'comment': rating.comment,
+                'timestamp': rating.timestamp,
+                'laptop_title': rating.laptop_title,
+                'laptop_brand': rating.laptop_brand,
+                'laptop_price': rating.laptop_price,
+                'laptop_rating': rating.laptop_rating,
+                'laptop_image': rating.laptop_image
+            })
+        
+        return jsonify({
+            'success': True,
+            'rating_history': ratings_data,
+            'count': len(ratings_data)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting enhanced user ratings: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/comprehensive-stats', methods=['GET'])
+def api_get_comprehensive_user_stats(user_id):
+    """API endpoint to get comprehensive user statistics with enhanced history objects."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        views_limit = request.args.get('views_limit', 20, type=int)
+        ratings_limit = request.args.get('ratings_limit', 20, type=int)
+        behavior_limit = request.args.get('behavior_limit', 50, type=int)
+        
+        user_stats = user_manager.get_comprehensive_user_stats(
+            user_id, views_limit, ratings_limit, behavior_limit
+        )
+        
+        if not user_stats:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        # Convert dataclass objects to dictionaries for JSON serialization
+        viewed_products_data = []
+        for product in user_stats.viewed_products:
+            viewed_products_data.append({
+                'laptop_id': product.laptop_id,
+                'view_count': product.view_count,
+                'first_viewed': product.first_viewed,
+                'last_viewed': product.last_viewed,
+                'laptop_title': product.laptop_title,
+                'laptop_brand': product.laptop_brand,
+                'laptop_price': product.laptop_price,
+                'laptop_rating': product.laptop_rating,
+                'laptop_image': product.laptop_image
+            })
+        
+        rating_history_data = []
+        for rating in user_stats.rating_history:
+            rating_history_data.append({
+                'laptop_id': rating.laptop_id,
+                'rating': rating.rating,
+                'comment': rating.comment,
+                'timestamp': rating.timestamp,
+                'laptop_title': rating.laptop_title,
+                'laptop_brand': rating.laptop_brand,
+                'laptop_price': rating.laptop_price,
+                'laptop_rating': rating.laptop_rating,
+                'laptop_image': rating.laptop_image
+            })
+        
+        recent_activity_data = []
+        for behavior in user_stats.recent_activity:
+            recent_activity_data.append({
+                'behavior_id': behavior.behavior_id,
+                'user_id': behavior.user_id,
+                'laptop_id': behavior.laptop_id,
+                'behavior_type': behavior.behavior_type,
+                'timestamp': behavior.timestamp,
+                'data': behavior.data
+            })
+        
+        return jsonify({
+            'success': True,
+            'user_stats': {
+                'user_id': user_stats.user_id,
+                'username': user_stats.username,
+                'email': user_stats.email,
+                'created_at': user_stats.created_at,
+                'last_active': user_stats.last_active,
+                'total_views': user_stats.total_views,
+                'total_ratings': user_stats.total_ratings,
+                'total_comments': user_stats.total_comments,
+                'viewed_products': viewed_products_data,
+                'rating_history': rating_history_data,
+                'recent_activity': recent_activity_data
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting comprehensive user stats: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/sync-amazon-users', methods=['POST'])
+def api_sync_amazon_users():
+    """API endpoint to manually sync Amazon dataset users to local database."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        logger.info("Manual sync of Amazon users requested")
+        
+        # Trigger the sync
+        sync_result = user_manager.sync_all_amazon_users_to_local_db()
+        
+        if 'error' in sync_result:
+            return jsonify({
+                'success': False, 
+                'error': sync_result['error']
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'message': 'Amazon users synced successfully',
+            'sync_result': sync_result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error syncing Amazon users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/users/<user_id>/ratings/<laptop_id>', methods=['POST'])
 def api_update_user_rating(user_id, laptop_id):
     """API endpoint to update a user's rating for a specific laptop."""
@@ -1784,23 +2122,16 @@ def api_update_user_rating(user_id, laptop_id):
         if not rating:
             return jsonify({'success': False, 'error': 'rating is required'}), 400
         
-        # Track the rating behavior
+        # Track the rating behavior (including comment if provided)
         rating_behavior_id = user_manager.track_behavior(
             user_id=user_id,
             laptop_id=int(laptop_id),
             behavior_type='rating',
-            data={'rating': float(rating)}
+            data={'rating': float(rating), 'comment': comment.strip() if comment else ''}
         )
         
-        # Track comment behavior separately if comment is provided
+        # No need for separate comment tracking since it's handled in rating
         comment_behavior_id = None
-        if comment and comment.strip():
-            comment_behavior_id = user_manager.track_behavior(
-                user_id=user_id,
-                laptop_id=int(laptop_id),
-                behavior_type='comment',
-                data={'comment': comment.strip()}
-            )
         
         return jsonify({
             'success': True,
@@ -1831,23 +2162,16 @@ def api_submit_user_rating(user_id, laptop_id=None):
         if not laptop_id or not rating:
             return jsonify({'success': False, 'error': 'laptop_id and rating are required'}), 400
         
-        # Track the rating behavior
+        # Track the rating behavior (including comment if provided)
         rating_behavior_id = user_manager.track_behavior(
             user_id=user_id,
             laptop_id=int(laptop_id),
             behavior_type='rating',
-            data={'rating': float(rating)}
+            data={'rating': float(rating), 'comment': comment.strip() if comment else ''}
         )
         
-        # Track comment behavior separately if comment is provided
+        # No need for separate comment tracking since it's handled in rating
         comment_behavior_id = None
-        if comment and comment.strip():
-            comment_behavior_id = user_manager.track_behavior(
-                user_id=user_id,
-                laptop_id=int(laptop_id),
-                behavior_type='comment',
-                data={'comment': comment.strip()}
-            )
         
         return jsonify({
             'success': True,
@@ -1858,6 +2182,93 @@ def api_submit_user_rating(user_id, laptop_id=None):
         
     except Exception as e:
         logger.error(f"Error submitting user rating: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/ratings/<laptop_id>', methods=['DELETE'])
+def api_delete_user_rating(user_id, laptop_id):
+    """API endpoint to delete a user's rating for a specific laptop."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        # Delete the rating from the database
+        with sqlite3.connect(user_manager.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Check if rating exists
+            cursor.execute('''
+                SELECT COUNT(*) FROM user_ratings WHERE user_id = ? AND laptop_id = ?
+            ''', (user_id, laptop_id))
+            
+            if cursor.fetchone()[0] == 0:
+                return jsonify({'success': False, 'error': 'Rating not found'}), 404
+            
+            # Delete the rating
+            cursor.execute('''
+                DELETE FROM user_ratings WHERE user_id = ? AND laptop_id = ?
+            ''', (user_id, laptop_id))
+            
+            # Update user's total ratings counter
+            cursor.execute('''
+                UPDATE users SET total_ratings = total_ratings - 1 WHERE user_id = ?
+            ''', (user_id,))
+            
+            conn.commit()
+        
+        logger.info(f"Deleted rating for user {user_id} on laptop {laptop_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Rating deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting user rating: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/views/<laptop_id>', methods=['DELETE'])
+def api_delete_user_view(user_id, laptop_id):
+    """API endpoint to delete a user's view history for a specific laptop."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        # Delete the view from the database
+        with sqlite3.connect(user_manager.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Get view count before deletion
+            cursor.execute('''
+                SELECT view_count FROM user_views WHERE user_id = ? AND laptop_id = ?
+            ''', (user_id, laptop_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                return jsonify({'success': False, 'error': 'View history not found'}), 404
+            
+            view_count = result[0]
+            
+            # Delete the view record
+            cursor.execute('''
+                DELETE FROM user_views WHERE user_id = ? AND laptop_id = ?
+            ''', (user_id, laptop_id))
+            
+            # Update user's total views counter
+            cursor.execute('''
+                UPDATE users SET total_views = total_views - ? WHERE user_id = ?
+            ''', (view_count, user_id))
+            
+            conn.commit()
+        
+        logger.info(f"Deleted view history for user {user_id} on laptop {laptop_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'View history deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting user view history: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/users/<user_id>/behavior', methods=['POST'])
@@ -2007,7 +2418,7 @@ def api_create_user_from_existing():
             username = f"User_{user_id_encoded}"
         
         # Create user profile from existing user
-        user = user_manager.create_user_from_existing(user_id_encoded, username)
+        user = user_manager.create_user_from_existing(user_id_encoded, username, df_rating)
         
         # Store current user in session
         session['current_user'] = {
@@ -2039,6 +2450,78 @@ def api_create_user_from_existing():
         
     except Exception as e:
         logger.error(f"Error creating user from existing: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/recalculate-stats', methods=['POST'])
+def api_recalculate_user_stats():
+    """API endpoint to recalculate user statistics."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'user_id is required'}), 400
+        
+        # Recalculate user stats
+        stats = user_manager.recalculate_user_stats(user_id)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error recalculating user stats: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/<user_id>/debug-stats', methods=['GET'])
+def api_debug_user_stats(user_id):
+    """API endpoint to debug user statistics."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        debug_info = user_manager.debug_user_stats(user_id)
+        
+        return jsonify({
+            'success': True,
+            'debug_info': debug_info
+        })
+        
+    except Exception as e:
+        logger.error(f"Error debugging user stats: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/users/sync-stats', methods=['POST'])
+def api_sync_user_stats():
+    """API endpoint to synchronize user statistics with Amazon data."""
+    try:
+        if user_manager is None:
+            return jsonify({'success': False, 'error': 'User management system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        user_id_encoded = data.get('user_id_encoded')
+        if not user_id_encoded:
+            return jsonify({'success': False, 'error': 'user_id_encoded is required'}), 400
+        
+        # Sync stats from Amazon data
+        stats = user_manager.sync_user_stats_from_amazon_data(user_id_encoded)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error syncing user stats: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/test-algorithms', methods=['GET'])

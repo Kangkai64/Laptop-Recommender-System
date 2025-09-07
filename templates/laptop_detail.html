@@ -42,6 +42,41 @@
         border-radius: 15px;
         font-size: 0.8rem;
     }
+    
+    /* Review Card Styles */
+    .review-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #007bff;
+    }
+    
+    .review-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important;
+    }
+    
+    .review-card .card-body {
+        padding: 1.25rem;
+    }
+    
+    .review-content {
+        min-height: 60px;
+    }
+    
+    .rating-stars {
+        font-size: 0.9rem;
+    }
+    
+    .review-meta {
+        font-size: 0.85rem;
+    }
+    
+    .review-actions {
+        font-size: 0.85rem;
+    }
+    
+    .reviews-container {
+        margin-top: 1rem;
+    }
 </style>
 {% endblock %}
 
@@ -363,63 +398,189 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <h6><i class="fas fa-chart-bar me-2 text-primary"></i>Rating Statistics</h6>
-                            <p class="text-muted">
-                                Total Ratings: <strong>{{ laptop_ratings|length }}</strong><br>
-                                Average Rating: <strong>{{ "%.2f"|format((laptop_ratings|map(attribute='rating')|list|sum) / laptop_ratings|length) }}</strong>
-                            </p>
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="text-primary mb-1">{{ laptop_ratings|length }}</h4>
+                                <small class="text-muted">Total Reviews</small>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <h6><i class="fas fa-users me-2 text-primary"></i>User Engagement</h6>
-                            <p class="text-muted">
-                                Unique Users: <strong>{{ laptop_ratings|map(attribute='user_id_encoded')|unique|list|length }}</strong><br>
-                                Rating Range: <strong>{{ laptop_ratings|map(attribute='rating')|min }} - {{ laptop_ratings|map(attribute='rating')|max }}</strong>
-                            </p>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="text-success mb-1">{{ "%.1f"|format((laptop_ratings|map(attribute='rating')|list|sum) / laptop_ratings|length) }}</h4>
+                                <small class="text-muted">Average Rating</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="text-info mb-1">{{ laptop_ratings|map(attribute='user_id_encoded')|unique|list|length }}</h4>
+                                <small class="text-muted">Unique Users</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="text-warning mb-1">
+                                    {% set helpful_reviews = laptop_ratings|selectattr('helpful_vote', 'gt', 0)|list|length %}
+                                    {{ helpful_reviews }}
+                                </h4>
+                                <small class="text-muted">Helpful Reviews</small>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Rating Distribution -->
-                    <div class="mb-4">
-                        <h6><i class="fas fa-chart-pie me-2 text-primary"></i>Rating Distribution</h6>
-                        <div class="row">
-                            {% for rating in range(1, 6) %}
-                            {% set count = laptop_ratings|selectattr('rating', 'equalto', rating)|list|length %}
-                            {% set percentage = (count / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
-                            <div class="col-md-2 col-4 mb-2">
-                                <div class="text-center">
-                                    <div class="rating-bar-container" style="height: 100px; position: relative; background: #f8f9fa; border-radius: 5px; margin-bottom: 5px;">
-                                        <div class="rating-bar" style="position: absolute; bottom: 0; left: 0; right: 0; background: {% if rating >= 4 %}#28a745{% elif rating >= 3 %}#ffc107{% else %}#dc3545{% endif %}; height: {{ percentage }}%; border-radius: 0 0 5px 5px;"></div>
-                                        <div class="rating-count" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; color: #333;">{{ count }}</div>
-                                    </div>
-                                    <small class="text-muted">{{ rating }} Star{{ 's' if rating != 1 else '' }}</small>
+                    <!-- Additional Statistics -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-chart-line me-2 text-primary"></i>Rating Distribution</h6>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">5★</span>
+                                <div class="flex-grow-1 bg-light rounded" style="height: 8px;">
+                                    {% set five_star = laptop_ratings|selectattr('rating', 'equalto', 5)|list|length %}
+                                    {% set five_star_pct = (five_star / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                                    <div class="bg-success rounded" style="height: 100%; width: {{ five_star_pct }}%;"></div>
+                                </div>
+                                <span class="ms-2 text-muted">{{ five_star }} ({{ five_star_pct }}%)</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">4★</span>
+                                <div class="flex-grow-1 bg-light rounded" style="height: 8px;">
+                                    {% set four_star = laptop_ratings|selectattr('rating', 'equalto', 4)|list|length %}
+                                    {% set four_star_pct = (four_star / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                                    <div class="bg-success rounded" style="height: 100%; width: {{ four_star_pct }}%;"></div>
+                                </div>
+                                <span class="ms-2 text-muted">{{ four_star }} ({{ four_star_pct }}%)</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">3★</span>
+                                <div class="flex-grow-1 bg-light rounded" style="height: 8px;">
+                                    {% set three_star = laptop_ratings|selectattr('rating', 'equalto', 3)|list|length %}
+                                    {% set three_star_pct = (three_star / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                                    <div class="bg-warning rounded" style="height: 100%; width: {{ three_star_pct }}%;"></div>
+                                </div>
+                                <span class="ms-2 text-muted">{{ three_star }} ({{ three_star_pct }}%)</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">2★</span>
+                                <div class="flex-grow-1 bg-light rounded" style="height: 8px;">
+                                    {% set two_star = laptop_ratings|selectattr('rating', 'equalto', 2)|list|length %}
+                                    {% set two_star_pct = (two_star / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                                    <div class="bg-danger rounded" style="height: 100%; width: {{ two_star_pct }}%;"></div>
+                                </div>
+                                <span class="ms-2 text-muted">{{ two_star }} ({{ two_star_pct }}%)</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="me-2">1★</span>
+                                <div class="flex-grow-1 bg-light rounded" style="height: 8px;">
+                                    {% set one_star = laptop_ratings|selectattr('rating', 'equalto', 1)|list|length %}
+                                    {% set one_star_pct = (one_star / laptop_ratings|length * 100)|round(1) if laptop_ratings|length > 0 else 0 %}
+                                    <div class="bg-danger rounded" style="height: 100%; width: {{ one_star_pct }}%;"></div>
+                                </div>
+                                <span class="ms-2 text-muted">{{ one_star }} ({{ one_star_pct }}%)</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-info-circle me-2 text-primary"></i>Review Insights</h6>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Reviews with Text:</span>
+                                    <strong>
+                                        {% set text_reviews = laptop_ratings|selectattr('text', 'defined')|selectattr('text', 'ne', '')|list|length %}
+                                        {{ text_reviews }} ({{ ((text_reviews / laptop_ratings|length * 100)|round(1)) if laptop_ratings|length > 0 else 0 }}%)
+                                    </strong>
                                 </div>
                             </div>
-                            {% endfor %}
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Reviews with Titles:</span>
+                                    <strong>
+                                        {% set title_reviews = laptop_ratings|selectattr('title_x', 'defined')|selectattr('title_x', 'ne', '')|list|length %}
+                                        {{ title_reviews }} ({{ ((title_reviews / laptop_ratings|length * 100)|round(1)) if laptop_ratings|length > 0 else 0 }}%)
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Total Helpful Votes:</span>
+                                    <strong>
+                                        {% set total_helpful = laptop_ratings|map(attribute='helpful_vote')|sum %}
+                                        {{ total_helpful }}
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Rating Range:</span>
+                                    <strong>{{ laptop_ratings|map(attribute='rating')|min }} - {{ laptop_ratings|map(attribute='rating')|max }}</strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <!-- Recent Ratings Table -->
-                    <div class="table-responsive">
-                        <h6><i class="fas fa-list me-2 text-primary"></i>Recent Ratings</h6>
-                        <table class="table table-striped table-hover">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>User ID</th>
-                                    <th>Rating</th>
-                                    <th>Date</th>
-                                    <th>Review</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for rating in laptop_ratings[:10] %}
-                                <tr>
-                                    <td>
-                                        <span class="badge bg-secondary">User {{ rating.user_id_encoded }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="rating-stars">
+                    
+                    <!-- Review Filters -->
+                    <div class="mb-4">
+                        <h6><i class="fas fa-filter me-2 text-primary"></i>Filter Reviews</h6>
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="ratingFilter" class="form-label">Rating</label>
+                                <select class="form-select" id="ratingFilter">
+                                    <option value="all">All Ratings</option>
+                                    <option value="5">5 Stars</option>
+                                    <option value="4">4 Stars</option>
+                                    <option value="3">3 Stars</option>
+                                    <option value="2">2 Stars</option>
+                                    <option value="1">1 Star</option>
+                                </select>
+                                    </div>
+                            <div class="col-md-3">
+                                <label for="sortFilter" class="form-label">Sort By</label>
+                                <select class="form-select" id="sortFilter">
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="highest">Highest Rating</option>
+                                    <option value="lowest">Lowest Rating</option>
+                                    <option value="helpful">Most Helpful</option>
+                                </select>
+                                </div>
+                            <div class="col-md-3">
+                                <label for="textFilter" class="form-label">Review Type</label>
+                                <select class="form-select" id="textFilter">
+                                    <option value="all">All Reviews</option>
+                                    <option value="with_text">With Review Text</option>
+                                    <option value="with_title">With Review Title</option>
+                                    <option value="helpful">Helpful Reviews</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid">
+                                    <button class="btn btn-outline-primary" onclick="applyFilters()">
+                                        <i class="fas fa-search me-1"></i>Apply Filters
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Enhanced Reviews Display -->
+                    <div class="reviews-container">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-list me-2 text-primary"></i>Reviews & Ratings</h6>
+                            <div class="text-muted">
+                                <span id="reviewCount">{{ laptop_ratings|length }}</span> reviews found
+                            </div>
+                        </div>
+                        
+                        <!-- Review Cards -->
+                        <div class="row g-3">
+                            {% for rating in laptop_ratings[:6] %}
+                            <div class="col-md-6">
+                                <div class="card h-100 review-card border-0 shadow-sm">
+                                    <div class="card-body">
+                                        <!-- Review Header -->
+                                        <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <div class="d-flex align-items-center">
+                                                <span class="rating-stars me-2">
                                             {% for i in range(5) %}
                                                 {% if i < rating.rating %}
                                                     <i class="fas fa-star text-warning"></i>
@@ -428,44 +589,88 @@
                                                 {% endif %}
                                             {% endfor %}
                                         </span>
-                                        <span class="ms-2 fw-bold">{{ rating.rating }}</span>
-                                    </td>
-                                    <td>
+                                                <span class="fw-bold text-primary">{{ rating.rating }}/5</span>
+                                            </div>
+                                            <div class="text-end">
+                                                <span class="badge bg-light text-dark">User {{ rating.user_id_encoded }}</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Review Title -->
+                                        {% if rating.title_x and rating.title_x.strip() %}
+                                        <h6 class="card-title text-dark mb-2">
+                                            <i class="fas fa-quote-left me-1 text-primary"></i>
+                                            "{{ rating.title_x }}"
+                                        </h6>
+                                        {% endif %}
+                                        
+                                        <!-- Review Text -->
+                                        <div class="review-content mb-3">
+                                            {% if rating.text_clean and rating.text_clean.strip() %}
+                                                <p class="card-text text-muted mb-0" style="line-height: 1.5;">
+                                                    {{ rating.text_clean[:150] }}{% if rating.text_clean|length > 150 %}...{% endif %}
+                                                </p>
+                                            {% elif rating.text and rating.text.strip() %}
+                                                <p class="card-text text-muted mb-0" style="line-height: 1.5;">
+                                                    {{ rating.text[:150] }}{% if rating.text|length > 150 %}...{% endif %}
+                                                </p>
+                                            {% else %}
+                                                <p class="card-text text-muted mb-0 fst-italic">
+                                                    No review text provided
+                                                </p>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <!-- Review Footer -->
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div class="review-meta">
                                         <small class="text-muted">
+                                                    <i class="fas fa-calendar me-1"></i>
                                             {% if rating.timestamp %}
                                                 {% if rating.timestamp is string %}
-                                                    {{ rating.timestamp }}
+                                                            {{ rating.timestamp[:10] if rating.timestamp|length > 10 else rating.timestamp }}
                                                 {% else %}
                                                     {{ rating.timestamp.strftime('%B %d, %Y') }}
                                                 {% endif %}
                                             {% else %}
-                                                N/A
+                                                        Date not available
                                             {% endif %}
                                         </small>
-                                    </td>
-                                    <td>
-                                        {% if rating.text_clean %}
-                                            <div class="review-text" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ rating.text_clean }}">
-                                                {{ rating.text_clean[:100] }}{% if rating.text_clean|length > 100 %}...{% endif %}
                                             </div>
-                                        {% elif rating.text %}
-                                            <div class="review-text" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ rating.text }}">
-                                                {{ rating.text[:100] }}{% if rating.text|length > 100 %}...{% endif %}
+                                            <div class="review-actions">
+                                                {% if rating.helpful_vote and rating.helpful_vote > 0 %}
+                                                <small class="text-success">
+                                                    <i class="fas fa-thumbs-up me-1"></i>
+                                                    {{ rating.helpful_vote }} helpful
+                                                </small>
+                                                {% endif %}
                                             </div>
+                                        </div>
+                                        
+                                        <!-- Rating Quality Badge -->
+                                        <div class="mt-2">
+                                            {% if rating.rating >= 4 %}
+                                                <span class="badge bg-success">Excellent</span>
+                                            {% elif rating.rating >= 3 %}
+                                                <span class="badge bg-warning text-dark">Good</span>
                                         {% else %}
-                                            <span class="text-muted">No review text</span>
+                                                <span class="badge bg-danger">Poor</span>
                                         {% endif %}
-                                    </td>
-                                </tr>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                                 {% endfor %}
-                            </tbody>
-                        </table>
-                        {% if laptop_ratings|length > 10 %}
-                        <div class="text-center mt-3">
-                            <small class="text-muted">Showing 10 of {{ laptop_ratings|length }} ratings</small>
-                            <br>
-                            <a href="{{ url_for('rating_details', laptop_id=laptop.laptop_id) }}" class="btn btn-outline-primary btn-sm mt-2">
-                                <i class="fas fa-eye me-1"></i>See All Ratings
+                        </div>
+                        
+                        <!-- Show More Button -->
+                        {% if laptop_ratings|length > 6 %}
+                        <div class="text-center mt-4">
+                            <div class="mb-2">
+                                <small class="text-muted">Showing 6 of {{ laptop_ratings|length }} reviews</small>
+                            </div>
+                            <a href="{{ url_for('rating_details', laptop_id=laptop.laptop_id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-eye me-2"></i>View All Reviews
                             </a>
                         </div>
                         {% endif %}
@@ -858,6 +1063,127 @@ function changeMainImage(imageSrc, imageIndex) {
         clickedThumbnail.style.border = '2px solid #007bff';
     }
 }
+
+// Review Filtering Functions
+let allReviews = [];
+let filteredReviews = [];
+
+// Store all reviews data when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Extract review data from the page
+    const reviewCards = document.querySelectorAll('.review-card');
+    allReviews = Array.from(reviewCards).map(card => {
+        const rating = parseInt(card.querySelector('.fw-bold.text-primary').textContent.split('/')[0]);
+        const userElement = card.querySelector('.badge.bg-light.text-dark');
+        const user = userElement ? userElement.textContent.replace('User ', '') : '';
+        const titleElement = card.querySelector('.card-title');
+        const title = titleElement ? titleElement.textContent.replace(/^"|"$/g, '') : '';
+        const textElement = card.querySelector('.card-text');
+        const text = textElement ? textElement.textContent : '';
+        const helpfulElement = card.querySelector('.text-success');
+        const helpful = helpfulElement ? parseInt(helpfulElement.textContent.match(/\d+/)[0]) : 0;
+        const dateElement = card.querySelector('.review-meta small');
+        const date = dateElement ? dateElement.textContent.trim() : '';
+        
+        return {
+            element: card.parentElement,
+            rating: rating,
+            user: user,
+            title: title,
+            text: text,
+            helpful: helpful,
+            date: date,
+            hasText: text && text.trim() !== '' && text !== 'No review text provided',
+            hasTitle: title && title.trim() !== ''
+        };
+    });
+    
+    filteredReviews = [...allReviews];
+    console.log('Loaded', allReviews.length, 'reviews for filtering');
+});
+
+function applyFilters() {
+    const ratingFilter = document.getElementById('ratingFilter').value;
+    const sortFilter = document.getElementById('sortFilter').value;
+    const textFilter = document.getElementById('textFilter').value;
+    
+    // Filter reviews
+    filteredReviews = allReviews.filter(review => {
+        // Rating filter
+        if (ratingFilter !== 'all' && review.rating !== parseInt(ratingFilter)) {
+            return false;
+        }
+        
+        // Text filter
+        if (textFilter === 'with_text' && !review.hasText) {
+            return false;
+        }
+        if (textFilter === 'with_title' && !review.hasTitle) {
+            return false;
+        }
+        if (textFilter === 'helpful' && review.helpful === 0) {
+            return false;
+        }
+        
+        return true;
+    });
+    
+    // Sort reviews
+    switch(sortFilter) {
+        case 'newest':
+            // For now, keep original order (newest first by default)
+            break;
+        case 'oldest':
+            filteredReviews.reverse();
+            break;
+        case 'highest':
+            filteredReviews.sort((a, b) => b.rating - a.rating);
+            break;
+        case 'lowest':
+            filteredReviews.sort((a, b) => a.rating - b.rating);
+            break;
+        case 'helpful':
+            filteredReviews.sort((a, b) => b.helpful - a.helpful);
+            break;
+    }
+    
+    // Hide all review cards
+    allReviews.forEach(review => {
+        review.element.style.display = 'none';
+    });
+    
+    // Show filtered reviews (limit to 6 for display)
+    const reviewsToShow = filteredReviews.slice(0, 6);
+    reviewsToShow.forEach(review => {
+        review.element.style.display = 'block';
+    });
+    
+    // Update review count
+    document.getElementById('reviewCount').textContent = filteredReviews.length;
+    
+    // Update show more button visibility
+    const showMoreBtn = document.querySelector('.text-center.mt-4');
+    if (showMoreBtn) {
+        if (filteredReviews.length > 6) {
+            showMoreBtn.style.display = 'block';
+        } else {
+            showMoreBtn.style.display = 'none';
+        }
+    }
+    
+    console.log('Applied filters:', { ratingFilter, sortFilter, textFilter, results: filteredReviews.length });
+}
+
+// Auto-apply filters when dropdowns change
+document.addEventListener('DOMContentLoaded', function() {
+    const filterSelects = ['ratingFilter', 'sortFilter', 'textFilter'];
+    filterSelects.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', applyFilters);
+        }
+    });
+});
 
 $(document).ready(function() {
     console.log('Laptop detail page loaded');

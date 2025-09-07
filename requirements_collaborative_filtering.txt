@@ -20,5 +20,8 @@ scipy>=1.10.0
 # Optional: For GPU acceleration (if available)
 # torch>=2.0.0
 
+# Model persistence and serialization
+joblib>=1.2.0
+
 # Optional: For additional similarity metrics
 # scikit-learn-extra>=0.2.0
